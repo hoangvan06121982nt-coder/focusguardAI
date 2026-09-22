@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trình giả lập Ứng dụng Di động FocusGuard</title>
+    <!-- Google Fonts -->
+    <link href="/static/css/outfit.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="/static/css/all.min.css">
+    <!-- Custom CSS reset and mobile styling -->
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Outfit', sans-serif;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        body {
+            background-color: #0b0f19;
+            color: #f1f5f9;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Mobile Frame Status Bar overlay */
+        .status-bar {
+            height: 38px;
+            padding: 12px 24px 0 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #94a3b8;
+            background-color: #0b0f19;
+            z-index: 100;
+        }
+        .status-bar-right {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* Container & Tabs */
+        .app-content {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 1rem 1.25rem 5rem 1.25rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+        }
+        .tab-panel {
+            display: none;
+        }
+        .tab-panel.active {
+            display: block;
+        }
+
+        /* Header UI */
+        .app-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+        }
+        .app-header h4 {
+            font-weight: 700;
+            font-size: 1.3rem;
+            color: #fff;
+        }
+        .app-header span {
+            font-size: 0.75rem;
+            background-color: rgba(59, 130, 246, 0.2);
+            color: #3b82f6;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-weight: 600;
+        }
+
+        /* Score Display Card */
+        .score-circle-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem 1rem;
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 24px;
+            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3);
+            text-align: center;
+        }
+        .score-val {
+            font-size: 3.5rem;
+            font-weight: 800;
+            color: #3b82f6;
+            line-height: 1;
+            margin-bottom: 4px;
+        }
+        .score-label {
+            font-size: 0.8rem;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .status-pill {
+            margin-top: 1rem;
+            background: rgba(16, 185, 129, 0.15);
+            color: #10b981;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            padding: 6px 16px;
+            border-radius: 50px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* Mobile Stats Cards */
+        .mobile-card {
+            background-color: #1e293b;
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 20px;
+            padding: 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        .mobile-card-icon {
+            width: 44px; height: 44px;
+            border-radius: 12px;
+            background-color: rgba(59, 130, 246, 0.15);
+            color: #3b82f6;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.2rem;
+            flex-shrink: 0;
+        }
+        .mobile-card-icon.danger {
+            background-color: rgba(239, 110, 110, 0.15);
+            color: #ef4444;
+        }
+        .mobile-card-icon.success {
+            background-color: rgba(16, 185, 129, 0.15);
+            color: #10b981;
+        }
+        .mobile-card-details h6 {
+            font-size: 0.78rem;
+            color: #94a3b8;
+            font-weight: 500;
+            text-transform: uppercase;
+        }
+        .mobile-card-details h4 {
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: #fff;
+            margin-top: 2px;
+        }
+
+        /* Logs screen */
+        .log-container {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .log-item {
+            background-color: #111827;
+            padding: 12px 16px;
+            border-radius: 16px;
+            border-left: 4px solid #f59e0b;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .log-item.danger { border-left-color: #ef4444; }
+        .log-item.info { border-left-color: #10b981; }
+        .log-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .log-title { font-weight: 600; font-size: 0.85rem; color: #fff; }
+        .log-time { font-size: 0.72rem; color: #6b7280; }
+        .log-desc { font-size: 0.78rem; color: #9ca3af; }
+
+        /* Coach panel */
+        .coach-box {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(15, 23, 42, 0.4) 100%);
+            border: 1px solid rgba(59, 130, 246, 0.25);
+            padding: 1.25rem;
+            border-radius: 20px;
+        }
+        .coach-text {
+            font-size: 0.85rem;
+            line-height: 1.6;
+            color: #cbd5e1;
+            margin-bottom: 1rem;
+        }
+
+        /* Bottom Tab Navigator */
+        .bottom-nav {
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            height: 65px;
+            background-color: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(15px);
+            border-top: 1px solid rgba(255,255,255,0.06);
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            z-index: 100;
+        }
+        .tab-btn {
+            background: none;
+            border: none;
+            color: #64748b;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            cursor: pointer;
+            width: 20%;
+            height: 100%;
+            transition: color 0.2s;
+        }
+        .tab-btn i {
+            font-size: 1.25rem;
+        }
+        .tab-btn span {
+            font-size: 0.65rem;
+            font-weight: 500;
+        }
+        .tab-btn.active {
+            color: #3b82f6;
+        }
+    </style>
+</head>
+<body>
+    <!-- Phone Status Bar Mock -->
+    <div class="status-bar">
+        <span id="phone-time">15:47</span>
+        <div class="status-bar-right">
+            <i class="fa-solid fa-signal"></i>
+            <i class="fa-solid fa-wifi"></i>
+            <i class="fa-solid fa-battery-three-quarters"></i>
+        </div>
+    </div>
+
+    <!-- Scrollable Screen Content -->
+    <div class="app-content">
+        <!-- TAB 1: HOME -->
+        <div class="tab-panel active" id="tab-home">
+            <div class="app-header">
+                <h4>Bảng điều khiển</h4>
+                <span>Hôm nay</span>
+            </div>
+            
+            <div class="score-circle-container mt-3">
+                <div class="score-val" id="mob-score">84</div>
+                <div class="score-label">Điểm tập trung con</div>
+                <div class="status-pill">
+                    <span class="pulse-dot"></span> Đang học • Tập trung
+                </div>
+            </div>
+
+            <div class="row mt-3 d-flex flex-column gap-3">
+                <div class="mobile-card">
+                    <div class="mobile-card-icon"><i class="fa-solid fa-hourglass-half"></i></div>
+                    <div class="mobile-card-details">
+                        <h6>Thời lượng tích luỹ</h6>
+                        <h4>02:15:40</h4>
+                    </div>
+                </div>
+                <div class="mobile-card">
+                    <div class="mobile-card-icon danger"><i class="fa-solid fa-circle-exclamation"></i></div>
+                    <div class="mobile-card-details">
+                        <h6>Số lần xao nhãng</h6>
+                        <h4 id="mob-distractions">3 lần</h4>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 2: ANALYTICS -->
+        <div class="tab-panel" id="tab-analytics">
+            <div class="app-header">
+                <h4>Phân tích con</h4>
+            </div>
+            
+            <div class="mobile-card">
+                <div class="mobile-card-icon success"><i class="fa-solid fa-bullseye"></i></div>
+                <div class="mobile-card-details">
+                    <h6>Tỷ lệ nhìn màn hình</h6>
+                    <h4>92%</h4>
+                </div>
+            </div>
+            <div class="mobile-card mt-3">
+                <div class="mobile-card-icon danger"><i class="fa-solid fa-shoe-prints"></i></div>
+                <div class="mobile-card-details">
+                    <h6>Vắng mặt khỏi ghế</h6>
+                    <h4 id="mob-seat-leaving">2 lần (8 phút)</h4>
+                </div>
+            </div>
+            <div class="mobile-card mt-3">
+                <div class="mobile-card-icon"><i class="fa-solid fa-calendar-check"></i></div>
+                <div class="mobile-card-details">
+                    <h6>Tỷ lệ chuyên cần tuần</h6>
+                    <h4>96%</h4>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 3: LOGS -->
+        <div class="tab-panel" id="tab-logs">
+            <div class="app-header">
+                <h4>Nhật ký vi phạm</h4>
+            </div>
+            
+            <div class="log-container mt-2">
+                <div class="log-item danger">
+                    <div class="log-header">
+                        <span class="log-title">Sử dụng điện thoại</span>
+                        <span class="log-time">15:32</span>
+                    </div>
+                    <p class="log-desc">Phát hiện dùng điện thoại trong tiết học Toán</p>
+                </div>
+                <div class="log-item">
+                    <div class="log-header">
+                        <span class="log-title">Rời vị trí</span>
+                        <span class="log-time">15:10</span>
+                    </div>
+                    <p class="log-desc">Học sinh vắng mặt khỏi camera 4 phút</p>
+                </div>
+                <div class="log-item info">
+                    <div class="log-header">
+                        <span class="log-title">Chuyên cần</span>
+                        <span class="log-time">14:00</span>
+                    </div>
+                    <p class="log-desc">Điểm danh thành công lớp 10A1: Có mặt</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 4: COACH -->
+        <div class="tab-panel" id="tab-coach">
+            <div class="app-header">
+                <h4>AI Coach gợi ý</h4>
+            </div>
+            
+            <div class="coach-box mt-2">
+                <p class="coach-text">
+                    Dựa trên học máy phân tích thói quen: Nguyễn Văn An học tập tập trung nhất vào khung giờ <b>08:00 - 10:00</b> sáng. Mức độ mệt mỏi tăng cao sau phút thứ 45. Đề xuất: Đặt lịch nghỉ giải lao 5 phút định kỳ Pomodoro.
+                </p>
+                <div style="background-color: rgba(255,255,255,0.04); padding: 12px; border-radius: 12px; font-size: 0.8rem; color: #3b82f6; text-align: center; border: 1px dashed rgba(59,130,246,0.3)">
+                    <i class="fa-solid fa-lightbulb me-1"></i> Gợi ý: Bật chế độ ban đêm trước 22:00
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bottom Navigation Bar Mock -->
+    <div class="bottom-nav">
+        <button class="tab-btn active" onclick="switchTab('home', this)">
+            <i class="fa-solid fa-house"></i>
+            <span>Trang chủ</span>
+        </button>
+        <button class="tab-btn" onclick="switchTab('analytics', this)">
+            <i class="fa-solid fa-chart-bar"></i>
+            <span>Phân tích</span>
+        </button>
+        <button class="tab-btn" onclick="switchTab('logs', this)">
+            <i class="fa-solid fa-bell"></i>
+            <span>Nhật ký</span>
+        </button>
+        <button class="tab-btn" onclick="switchTab('coach', this)">
+            <i class="fa-solid fa-brain"></i>
+            <span>AI Coach</span>
+        </button>
+    </div>
+
+    <!-- Scripts -->
+    <script>
+        // System Clock Mock
+        function updateClock() {
+            const now = new Date();
+            const timeStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
+            document.getElementById('phone-time').innerText = timeStr;
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // Switch screen tabs
+        function switchTab(tabId, el) {
+            const panels = document.querySelectorAll('.tab-panel');
+            panels.forEach(p => p.classList.remove('active'));
+            document.getElementById('tab-' + tabId).classList.add('active');
+
+            const buttons = document.querySelectorAll('.tab-btn');
+            buttons.forEach(b => b.classList.remove('active'));
+            el.classList.add('active');
+        }
+
+        // Periodically fetch live stats from parent portal / API
+        async function fetchLiveStats() {
+            try {
+                const res = await fetch('/api/stats');
+                const data = await res.json();
+                if (data.focus_score !== undefined) {
+                    document.getElementById('mob-score').innerText = data.focus_score;
+                    document.getElementById('mob-distractions').innerText = data.distractions + ' lần';
+                    document.getElementById('mob-seat-leaving').innerText = data.seat_leaving_count + ' lần (' + Math.round(data.seat_leaving_duration / 60) + ' phút)';
+                }
+            } catch (e) {
+                // Keep default values
+            }
+        }
+        setInterval(fetchLiveStats, 3000);
+        fetchLiveStats();
+    </script>
+</body>
+</html>

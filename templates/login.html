@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="vi" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Đăng nhập - FocusGuard AI</title>
+    <!-- Google Fonts -->
+    <link href="{{ url_for('static', filename='css/outfit.css') }}" rel="stylesheet">
+    <!-- Bootstrap CSS 5.3 -->
+    <link href="{{ url_for('static', filename='css/bootstrap.min.css') }}" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/all.min.css') }}">
+    
+    <style>
+        :root {
+            --font-main: 'Outfit', sans-serif;
+            --bg-color: #030712;
+            --card-bg: rgba(17, 24, 39, 0.7);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --primary-glow: radial-gradient(circle, rgba(99, 102, 241, 0.15) 0%, rgba(99, 102, 241, 0) 70%);
+        }
+
+        body {
+            font-family: var(--font-main);
+            background-color: var(--bg-color);
+            color: #f3f4f6;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Ambient Glow in Background */
+        body::before {
+            content: '';
+            position: absolute;
+            width: 600px;
+            height: 600px;
+            background: var(--primary-glow);
+            top: -150px;
+            right: -150px;
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        body::after {
+            content: '';
+            position: absolute;
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, rgba(16, 185, 129, 0.08) 0%, rgba(16, 185, 129, 0) 70%);
+            bottom: -150px;
+            left: -150px;
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        .login-container {
+            width: 100%;
+            max-width: 500px;
+            padding: 20px;
+            z-index: 10;
+        }
+
+        .login-card {
+            background: var(--card-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--border-color);
+            border-radius: 24px;
+            padding: 40px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+        }
+
+        .brand-logo {
+            width: 56px;
+            height: 56px;
+            background: rgba(99, 102, 241, 0.1);
+            border: 1px solid rgba(99, 102, 241, 0.2);
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 20px auto;
+            color: #6366f1;
+            font-size: 1.75rem;
+        }
+
+        .form-control {
+            background: rgba(31, 41, 55, 0.5);
+            border: 1px solid var(--border-color);
+            color: #f3f4f6;
+            border-radius: 12px;
+            padding: 12px 16px;
+            font-size: 0.95rem;
+            transition: all 0.2s ease;
+        }
+
+        .form-control:focus {
+            background: rgba(31, 41, 55, 0.8);
+            border-color: #6366f1;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+            color: #f3f4f6;
+        }
+
+        .btn-submit {
+            background: linear-gradient(135deg, #6366f1, #4f46e5);
+            border: none;
+            border-radius: 12px;
+            padding: 12px;
+            font-weight: 600;
+            font-size: 1rem;
+            letter-spacing: 0.5px;
+            transition: all 0.2s ease;
+        }
+
+        .btn-submit:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(99, 102, 241, 0.35);
+            background: linear-gradient(135deg, #4f46e5, #4338ca);
+        }
+
+        .btn-submit:active {
+            transform: translateY(0);
+        }
+
+        .credentials-hint {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px dashed rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 12px 16px;
+            font-size: 0.85rem;
+            color: #9ca3af;
+        }
+
+        .credentials-hint strong {
+            color: #e5e7eb;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="login-container">
+        <div class="login-card">
+            <div class="text-center mb-4">
+                <div class="brand-logo">
+                    <i class="fa-solid fa-shield-halved"></i>
+                </div>
+                <h3 class="fw-bold mb-1">FocusGuard AI</h3>
+                <p class="text-muted small">Hệ thống Giám sát Tập trung Học tập</p>
+            </div>
+
+            {% if error %}
+            <div class="alert alert-danger d-flex align-items-center small" role="alert" style="border-radius: 12px; background: rgba(220, 53, 69, 0.1); border-color: rgba(220, 53, 69, 0.2); color: #ea868f;">
+                <i class="fa-solid fa-circle-exclamation me-2 fs-5"></i>
+                <div>{{ error }}</div>
+            </div>
+            {% endif %}
+
+            <form method="POST" action="{{ url_for('login') }}">
+                <div class="mb-3">
+                    <label for="username" class="form-label small text-muted">Tên đăng nhập</label>
+                    <div class="position-relative">
+                        <input type="text" class="form-control" id="username" name="username" placeholder="Nhập tên đăng nhập" required autocomplete="off">
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <label for="password" class="form-label small text-muted">Mật khẩu</label>
+                    <input type="password" class="form-control" id="password" name="password" placeholder="Nhập mật khẩu" required>
+                </div>
+
+                <button type="submit" class="btn btn-primary w-100 btn-submit mb-4">
+                    Đăng nhập <i class="fa-solid fa-arrow-right ms-2"></i>
+                </button>
+            </form>
+
+            <div class="credentials-hint">
+                <div class="d-flex align-items-start gap-2">
+                    <i class="fa-solid fa-circle-info text-primary mt-1"></i>
+                    <div>
+                        <span class="d-block mb-1 fw-medium text-white-50">Tài khoản Demo cuộc thi:</span>
+                        <div class="d-flex flex-column gap-1">
+                            <span>Tên: <strong>hocsinh</strong> | Mật khẩu: <strong>123</strong></span>
+                            <span>Tên: <strong>teacher</strong> | Mật khẩu: <strong>123</strong></span>
+                            <span>Tên: <strong>admin</strong> | Mật khẩu: <strong>123</strong></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS Bundle -->
+    <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
+</body>
+</html>

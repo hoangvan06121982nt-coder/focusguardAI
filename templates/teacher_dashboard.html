@@ -1,0 +1,1249 @@
+<!DOCTYPE html>
+<html lang="vi" data-bs-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FocusGuard AI - Bảng điều khiển Giáo viên</title>
+    <!-- Google Fonts -->
+    <link href="{{ url_for('static', filename='css/outfit.css') }}" rel="stylesheet">
+    <!-- Bootstrap CSS 5.3 -->
+    <link href="{{ url_for('static', filename='css/bootstrap.min.css') }}" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/all.min.css') }}">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <!-- Chart.js -->
+    <script src="{{ url_for('static', filename='js/chart.js') }}"></script>
+    <style>
+        /* Specific additions for Teacher Dashboard */
+        .student-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 14px;
+            margin-bottom: 25px;
+        }
+        
+        .student-card {
+            background-color: var(--bg-card);
+            border: 2px solid transparent;
+            border-radius: 14px;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            position: relative;
+            box-shadow: var(--shadow-sm);
+            overflow: hidden;
+        }
+        
+        .student-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .student-card.state-focused { border-color: var(--success-color); }
+        .student-card.state-normal { border-color: var(--primary-color); }
+        .student-card.state-sleepy { border-color: var(--warning-color); }
+        .student-card.state-distracted { border-color: var(--danger-color); }
+        .student-card.state-phone { border-color: var(--danger-color); }
+
+        /* Video/Photo Thumbnail Area */
+        .student-card-thumb {
+            width: 100%;
+            aspect-ratio: 4/3;
+            background: linear-gradient(135deg, #1e2340, #151a2c);
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        [data-bs-theme="light"] .student-card-thumb {
+            background: linear-gradient(135deg, #e8f0fe, #d1e0fc);
+        }
+
+        /* Live video feed inside the card */
+        .student-card-thumb img.student-snapshot {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+            transition: opacity 0.4s ease;
+        }
+
+        /* Placeholder when no video */
+        .student-thumb-placeholder {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+            color: var(--text-secondary);
+        }
+
+        .student-thumb-placeholder .initials-circle {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary-color), #6366f1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.3rem;
+            font-weight: 800;
+            color: #fff;
+            margin-bottom: 6px;
+            box-shadow: 0 4px 14px rgba(59,130,246,0.4);
+        }
+
+        /* State badge overlay on thumb */
+        .student-state-overlay {
+            position: absolute;
+            top: 8px;
+            left: 8px;
+            z-index: 2;
+        }
+
+        /* Online dot */
+        .student-online-dot {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #10b981;
+            border: 2px solid var(--bg-card);
+            z-index: 2;
+        }
+
+        .student-online-dot.offline { background: #6b7280; }
+
+        /* Score bar at bottom of thumb */
+        .student-score-bar {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: rgba(255,255,255,0.15);
+        }
+
+        .student-score-bar-fill {
+            height: 100%;
+            border-radius: 2px;
+            transition: width 0.6s ease;
+        }
+
+        /* Card info section */
+        .student-card-info {
+            padding: 10px 12px;
+        }
+
+        .student-card-info h6 {
+            font-size: 0.88rem;
+            font-weight: 700;
+            margin-bottom: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .student-focus-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.78rem;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        .student-focus-value {
+            font-weight: 700;
+            font-size: 0.85rem;
+        }
+
+        .student-badge {
+            font-size: 0.67rem;
+            padding: 2px 7px;
+            border-radius: 20px;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+        }
+        
+        .badge-focused { background-color: rgba(16, 185, 129, 0.18); color: var(--success-color); }
+        .badge-normal { background-color: rgba(59, 130, 246, 0.18); color: var(--primary-color); }
+        .badge-sleepy { background-color: rgba(245, 158, 11, 0.18); color: var(--warning-color); }
+        .badge-distracted { background-color: rgba(239, 68, 68, 0.18); color: var(--danger-color); }
+        .badge-phone { background-color: rgba(239, 68, 68, 0.18); color: var(--danger-color); }
+
+        .detail-panel {
+            background-color: var(--bg-card);
+            border-left: 1px solid var(--border-color);
+            padding: 20px;
+            height: calc(100vh - 75px);
+            position: sticky;
+            top: 75px;
+            overflow-y: auto;
+        }
+
+        .metric-card-mini {
+            background-color: var(--bg-main);
+            border-radius: 8px;
+            padding: 10px;
+            text-align: center;
+            border: 1px solid var(--border-color);
+        }
+
+        .metric-card-mini h6 {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-bottom: 4px;
+        }
+
+        .metric-card-mini span {
+            font-size: 0.95rem;
+            font-weight: 700;
+        }
+
+        .activity-log-item {
+            display: flex;
+            align-items: start;
+            padding: 8px 12px;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            background-color: var(--bg-main);
+            font-size: 0.8rem;
+        }
+        
+        .activity-log-item.log-danger { border-left: 4px solid var(--danger-color); }
+        .activity-log-item.log-warning { border-left: 4px solid var(--warning-color); }
+        .activity-log-item.log-info { border-left: 4px solid var(--primary-color); }
+
+        .bg-glass {
+            backdrop-filter: blur(10px);
+            background-color: rgba(21, 26, 44, 0.8);
+        }
+        [data-bs-theme="light"] .bg-glass {
+            background-color: rgba(255, 255, 255, 0.8);
+        }
+
+        /* Live indicator pulse animation */
+        @keyframes livePulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0.4); }
+            50% { box-shadow: 0 0 0 5px rgba(16,185,129,0); }
+        }
+        .student-online-dot { animation: livePulse 2s ease-in-out infinite; }
+
+        /* 3D Twin Styles */
+        .classroom-3d-container {
+            perspective: 1200px;
+            perspective-origin: 50% 10%;
+            transform-style: preserve-3d;
+            padding: 3rem;
+            background-color: #0b0f19;
+            border-radius: 16px;
+            min-height: 480px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+        .classroom-3d-floor {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 25px;
+            transform: rotateX(55deg) rotateZ(-30deg);
+            transform-style: preserve-3d;
+        }
+        .desk-3d {
+            width: 100px;
+            height: 100px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            transform-style: preserve-3d;
+            transform: translateZ(10px);
+            transition: all 0.3s ease;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+        }
+        .desk-3d:hover {
+            transform: translateZ(25px) scale(1.1);
+            background: rgba(59, 130, 246, 0.15);
+            border-color: rgba(59, 130, 246, 0.5);
+        }
+        .desk-3d .student-avatar-3d {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background-color: #10b981;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            font-weight: bold;
+            box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+            transition: all 0.3s ease;
+        }
+        .desk-3d.state-sleepy .student-avatar-3d {
+            background-color: #f59e0b;
+            box-shadow: 0 0 10px rgba(245, 158, 11, 0.8);
+        }
+        .desk-3d.state-distracted .student-avatar-3d {
+            background-color: #ef4444;
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.8);
+        }
+        .desk-3d.state-phone .student-avatar-3d {
+            background-color: #ef4444;
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.8);
+        }
+        .desk-3d.state-cheating .student-avatar-3d {
+            background-color: #ef4444;
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.8);
+            animation: bounce-3d 1s infinite alternate;
+        }
+        @keyframes bounce-3d {
+            from { transform: translateZ(0px); }
+            to { transform: translateZ(15px); }
+        }
+        .desk-3d .student-name-3d {
+            font-size: 0.65rem;
+            color: #94a3b8;
+            margin-top: 6px;
+            text-align: center;
+            max-width: 80px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            transform: translateZ(5px);
+        }
+        .desk-3d .score-badge-3d {
+            position: absolute;
+            top: -5px; right: -5px;
+            font-size: 0.6rem;
+            background: #111827;
+            border: 1px solid rgba(255,255,255,0.1);
+            color: #fff;
+            padding: 1px 4px;
+            border-radius: 4px;
+        }
+        .desk-3d.offline {
+            opacity: 0.5;
+        }
+        .desk-3d.offline .student-avatar-3d {
+            background-color: #6b7280;
+            box-shadow: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <i class="fa-solid fa-shield-halved text-primary fs-3"></i>
+                <div class="brand">
+                    <h5>FocusGuard AI</h5>
+                    <span>Giám sát Lớp học Trực tiếp</span>
+                </div>
+            </div>
+            
+            <ul class="sidebar-nav">
+                <li class="nav-item {% if active_tab == 'dashboard' %}active{% endif %}">
+                    <a href="/teacher/dashboard"><i class="fa-solid fa-desktop"></i> Giám sát trực tiếp</a>
+                </li>
+                <li class="nav-item {% if active_tab == 'students' %}active{% endif %}">
+                    <a href="/teacher/students"><i class="fa-solid fa-graduation-cap"></i> Học sinh</a>
+                </li>
+                <li class="nav-item {% if active_tab == 'analytics' %}active{% endif %}">
+                    <a href="/teacher/analytics"><i class="fa-solid fa-chart-line"></i> Phân tích</a>
+                </li>
+                <li class="nav-item {% if active_tab == 'reports' %}active{% endif %}">
+                    <a href="/teacher/reports"><i class="fa-solid fa-file-invoice-dollar"></i> Báo cáo</a>
+                </li>
+                <li class="nav-item {% if active_tab == 'alerts' %}active{% endif %}">
+                    <a href="/teacher/alerts"><i class="fa-solid fa-bell"></i> Cảnh báo</a>
+                </li>
+                <li class="nav-item {% if active_tab == 'attendance' %}active{% endif %}">
+                    <a href="/teacher/attendance"><i class="fa-solid fa-clipboard-user"></i> Điểm danh lớp</a>
+                </li>
+                <li class="nav-item {% if active_tab == 'settings' %}active{% endif %}">
+                    <a href="/teacher/settings"><i class="fa-solid fa-gear"></i> Cài đặt</a>
+                </li>
+            </ul>
+
+            <div class="sidebar-footer">
+                <div class="user-profile">
+                    <div class="avatar" id="sidebar-avatar">T</div>
+                    <div class="user-info">
+                        <h6 id="sidebar-username">{{ teacher_name }}</h6>
+                        <span>Giáo viên</span>
+                    </div>
+                </div>
+                <a href="/logout" class="logout-btn" title="Đăng xuất"><i class="fa-solid fa-right-from-bracket"></i></a>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <div class="main-content" style="margin-left: 260px; width: calc(100% - 260px);">
+            <!-- Topbar Header -->
+            <header class="topbar px-4 py-3 d-flex justify-content-between align-items-center" style="position: sticky; top: 0; z-index: 100;">
+                <div class="d-flex align-items-center gap-2">
+                    <h5 class="mb-0 fw-bold text-primary me-2">Giám sát Lớp:</h5>
+                    <select class="form-select form-select-sm bg-dark text-white border-secondary me-3" id="select-class-monitor" style="width: 100px;">
+                        <option value="1" {% if session.get('class_id') == 1 %}selected{% endif %}>10A1</option>
+                        <option value="2" {% if session.get('class_id') == 2 %}selected{% endif %}>10A2</option>
+                        <option value="3" {% if session.get('class_id') == 3 %}selected{% endif %}>10A3</option>
+                    </select>
+                    <span class="badge bg-success-subtle text-success border border-success px-2 py-1" style="font-size: 0.8rem;">
+                        <i class="fa-solid fa-users me-1"></i>
+                        <span id="online-count">0</span> Trực tuyến
+                    </span>
+                    <span id="ws-connection-indicator" class="badge bg-secondary ms-2" style="font-size: 0.75rem;">
+                        <i class="fa-solid fa-circle-notch fa-spin me-1"></i>Đang kết nối...
+                    </span>
+                </div>
+                
+                <div class="topbar-right d-flex align-items-center gap-3">
+                    <!-- Light/Dark Mode Switcher -->
+                    <button class="icon-btn" id="theme-toggle" title="Đổi chế độ sáng/tối">
+                        <i class="fa-solid fa-moon"></i>
+                    </button>
+                    
+                    <div class="user-display d-flex align-items-center gap-2">
+                        <div class="avatar bg-primary text-white" style="width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold;">GV</div>
+                        <div class="d-none d-md-block text-start">
+                            <span class="d-block fw-semibold text-primary" style="font-size: 0.85rem;" id="topbar-display-name">{{ teacher_name }}</span>
+                            <span class="text-muted" style="font-size: 0.75rem;">Giáo viên</span>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Dashboard Content Container -->
+            <div class="container-fluid p-4">
+                <!-- Section 1: Live Monitor Dashboard -->
+                <div id="section-teacher-dashboard" class="row g-4 {% if active_tab != 'dashboard' %}d-none{% endif %}">
+                    <!-- Mode Switcher -->
+                    <div class="col-12 mb-2 text-center">
+                        <div class="btn-group p-1 bg-dark bg-opacity-25 rounded-pill border border-secondary" role="group" style="backdrop-filter: blur(10px);">
+                            <input type="radio" class="btn-check" name="classroom-mode-select" id="mode-select-online" autocomplete="off" checked>
+                            <label class="btn btn-outline-primary rounded-pill px-4 py-2 border-0 text-uppercase fw-bold" for="mode-select-online" style="font-size: 0.8rem;">
+                                <i class="fa-solid fa-globe me-2"></i>Lớp học Trực tuyến
+                            </label>
+                            <input type="radio" class="btn-check" name="classroom-mode-select" id="mode-select-offline" autocomplete="off">
+                            <label class="btn btn-outline-primary rounded-pill px-4 py-2 border-0 text-uppercase fw-bold" for="mode-select-offline" style="font-size: 0.8rem;">
+                                <i class="fa-solid fa-school me-2"></i>Lớp học Trực tiếp
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Left Main Area -->
+                    <div class="col-lg-8 col-md-12 class-mode-online">
+                        <!-- Controls Card -->
+                        <div class="custom-card p-3 mb-4 d-flex justify-content-between align-items-center">
+                            <div class="d-flex align-items-center gap-3">
+                                <h6 class="mb-0 text-secondary">Trạng thái lớp học:</h6>
+                                <span class="badge bg-danger-subtle text-danger border border-danger" id="class-session-badge">Chưa bắt đầu</span>
+                            </div>
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-primary btn-sm px-3" id="btn-start-class"><i class="fa-solid fa-play me-1"></i> Bắt đầu lớp</button>
+                                <button class="btn btn-outline-danger btn-sm px-3" id="btn-end-class" style="display: none;"><i class="fa-solid fa-stop me-1"></i> Kết thúc lớp</button>
+                                <button class="btn btn-outline-secondary btn-sm px-3" id="btn-export-report"><i class="fa-solid fa-file-export me-1"></i> Xuất báo cáo</button>
+                            </div>
+                        </div>
+
+                        <!-- Classroom Statistics Cards Row -->
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-3 col-sm-6">
+                                <div class="custom-card p-3 d-flex align-items-center justify-content-between border-start border-primary border-4" style="background: rgba(59, 130, 246, 0.05);">
+                                    <div>
+                                        <span class="text-muted small d-block">Điểm Tập trung Trung bình</span>
+                                        <h3 class="fw-bold mb-0 text-primary" id="class-avg-focus">92%</h3>
+                                    </div>
+                                    <div class="icon-circle bg-primary bg-opacity-10 text-primary" style="width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                                        <i class="fa-solid fa-chart-simple fs-5"></i>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3 col-sm-6">
+                                <div class="custom-card p-3 d-flex align-items-center justify-content-between border-start border-success border-4" style="background: rgba(16, 185, 129, 0.05);">
+                                    <div>
+                                        <span class="text-muted small d-block">Học sinh Hoạt động</span>
+                                        <h3 class="fw-bold mb-0 text-success" id="class-active-count">0/28</h3>
+                                    </div>
+                                    <div class="icon-circle bg-success bg-opacity-10 text-success" style="width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                                        <i class="fa-solid fa-users fs-5"></i>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3 col-sm-6">
+                                <div class="custom-card p-3 d-flex align-items-center justify-content-between border-start border-warning border-4" style="background: rgba(245, 158, 11, 0.05);">
+                                    <div>
+                                        <span class="text-muted small d-block">Số lượng Cảnh báo</span>
+                                        <h3 class="fw-bold mb-0 text-warning" id="class-alert-count">0</h3>
+                                    </div>
+                                    <div class="icon-circle bg-warning bg-opacity-10 text-warning" style="width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                                        <i class="fa-solid fa-bell fs-5"></i>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3 col-sm-6">
+                                <div class="custom-card p-3 d-flex align-items-center justify-content-between border-start border-danger border-4" style="background: rgba(239, 68, 68, 0.05);">
+                                    <div>
+                                        <span class="text-muted small d-block">Học sinh Gặp rủi ro</span>
+                                        <h3 class="fw-bold mb-0 text-danger" id="class-risk-count">0</h3>
+                                    </div>
+                                    <div class="icon-circle bg-danger bg-opacity-10 text-danger" style="width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                                        <i class="fa-solid fa-triangle-exclamation fs-5"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- AI Intervention Recommendation Banner -->
+                        <div class="custom-card p-3 mb-4 border border-warning bg-warning bg-opacity-10 text-warning" id="banner-ai-intervention" style="display: none;">
+                            <div class="d-flex align-items-center justify-content-between">
+                                <div class="d-flex align-items-center gap-2">
+                                    <i class="fa-solid fa-triangle-exclamation fs-4"></i>
+                                    <div>
+                                        <strong class="d-block" id="intervention-title">Lớp học đang giảm tập trung!</strong>
+                                        <span class="small" id="intervention-text">AI Đề xuất: ✓ Cho lớp nghỉ giải lao 5 phút, ✓ Đặt câu hỏi tương tác</span>
+                                    </div>
+                                </div>
+                                <button class="btn btn-warning btn-sm" onclick="document.getElementById('banner-ai-intervention').style.display='none'">Đóng</button>
+                            </div>
+                        </div>
+
+                        <div class="custom-card p-4 mb-4">
+                            <div class="d-flex justify-content-between align-items-center mb-4">
+                                <h5 class="card-title fw-bold mb-0">Giám sát học sinh trực tiếp</h5>
+                                <div class="d-flex gap-2">
+                                    <button class="btn btn-outline-secondary btn-sm active" id="btn-view-2d"><i class="fa-solid fa-chalkboard"></i> Sơ đồ lớp học 2D</button>
+                                    <button class="btn btn-outline-secondary btn-sm" id="btn-view-grid"><i class="fa-solid fa-table-cells-large"></i> Dạng lưới</button>
+                                    <button class="btn btn-outline-secondary btn-sm" id="btn-view-list"><i class="fa-solid fa-list"></i> Dạng danh sách</button>
+                                    <button class="btn btn-outline-secondary btn-sm" id="btn-view-3d"><i class="fa-solid fa-cube"></i> Bản sao 3D Twin</button>
+                                </div>
+                            </div>
+                            
+                            <div class="student-grid d-none" id="student-cards-grid">
+                                <!-- Dynamically populated student cards -->
+                            </div>
+
+                            <!-- 2D Classroom Twin Container -->
+                            <div class="classroom-2d-container mb-3" id="student-2d-grid" style="background: rgba(15, 23, 42, 0.4); border-radius: 16px; border: 1px solid var(--border-color); padding: 2rem; position: relative;">
+                                <div class="text-center mb-4">
+                                    <div class="badge bg-primary px-4 py-2 rounded-pill" style="font-size: 0.9rem;">BẢNG ĐEN / GIÁO VIÊN</div>
+                                </div>
+                                <div class="seating-grid" id="classroom-seating-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; max-width: 800px; margin: 0 auto;">
+                                    <!-- Populated dynamically -->
+                                </div>
+                            </div>
+
+                            <!-- 3D Classroom Twin Container -->
+                            <div class="classroom-3d-container d-none mb-3" id="student-3d-grid">
+                                <div class="classroom-3d-floor" id="classroom-floor-grid">
+                                    <!-- Populated dynamically -->
+                                </div>
+                            </div>
+
+                            <div class="table-responsive d-none" id="student-list-grid">
+                                <table class="table table-hover align-middle">
+                                    <thead>
+                                        <tr>
+                                            <th>Mã HS</th>
+                                            <th>Học sinh</th>
+                                            <th>Trạng thái</th>
+                                            <th class="text-center">Độ tập trung</th>
+                                            <th class="text-center">Số lần vi phạm</th>
+                                            <th class="text-end">Hành động</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="student-list-rows">
+                                        <!-- Will be populated dynamically -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Bottom Charts Layout -->
+                        <div class="row g-4">
+                            <div class="col-md-5 col-sm-12">
+                                <div class="custom-card p-3 h-100">
+                                    <h6 class="fw-bold text-primary mb-3">Phân bố điểm tập trung</h6>
+                                    <div style="height: 180px; position: relative;">
+                                        <canvas id="donut-focus-distribution"></canvas>
+                                    </div>
+                                    <div class="text-center mt-2" style="font-size: 0.75rem;">
+                                        <span class="d-block fw-bold" id="donut-total-students">28 Học sinh</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-7 col-sm-12">
+                                <div class="custom-card p-3 h-100">
+                                    <h6 class="fw-bold text-primary mb-3">Điểm tập trung theo thời gian (TB lớp)</h6>
+                                    <div style="height: 200px;">
+                                        <canvas id="line-class-average"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right Panel Area (Detail View + Log) -->
+                    <div class="col-lg-4 col-md-12 class-mode-online">
+                        <!-- Class Session Time Counter -->
+                        <div class="custom-card p-3 mb-4 text-center">
+                            <h6 class="text-secondary text-uppercase mb-2" style="font-size: 0.75rem; letter-spacing: 0.05em;">Thời gian lớp học</h6>
+                            <h2 class="fw-bold text-primary mb-0" id="class-timer">00:00:00</h2>
+                            <small class="text-muted">Thời gian lớp học đang diễn ra</small>
+                        </div>
+
+                        <!-- Student Detail Side-Panel -->
+                        <div class="custom-card p-4 mb-4" id="student-detail-panel" style="display: none;">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h6 class="fw-bold text-primary mb-0">Thông tin học sinh</h6>
+                                <button type="button" class="btn-close" id="btn-close-detail" aria-label="Đóng"></button>
+                            </div>
+                            
+                            <div class="text-center pb-3 border-bottom mb-3">
+                            <!-- Live Camera Snapshot -->
+                            <div class="position-relative mb-3" style="border-radius:12px;overflow:hidden;background:#0d1117;">
+                                <img id="detail-student-snapshot"
+                                     src=""
+                                     alt="Camera học sinh"
+                                     style="width:100%;aspect-ratio:4/3;object-fit:cover;display:none;border-radius:12px;">
+                                <!-- Placeholder khi chưa có ảnh -->
+                                <div id="detail-snapshot-placeholder"
+                                     style="width:100%;aspect-ratio:4/3;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(135deg,#1e2340,#151a2c);border-radius:12px;">
+                                    <div id="detail-avatar"
+                                         class="avatar bg-primary text-white mb-2"
+                                         style="width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.6rem;font-weight:bold;"></div>
+                                    <small class="text-muted" style="font-size:0.72rem;opacity:0.7;">Chờ camera học sinh...</small>
+                                </div>
+                                <!-- LIVE badge overlay -->
+                                <span id="detail-live-badge"
+                                      class="badge bg-danger position-absolute"
+                                      style="top:8px;left:8px;font-size:0.65rem;display:none;">
+                                    <i class="fa-solid fa-circle fa-xs me-1" style="font-size:0.5rem;"></i>TRỰC TIẾP
+                                </span>
+                            </div>
+                            </div>
+
+                            <div class="text-center pb-3 border-bottom mb-3">
+                                <h5 class="fw-bold mb-1" id="detail-name">Nguyễn Văn An</h5>
+                                <span class="badge" id="detail-badge">Tập trung</span>
+                                <div class="text-muted mt-1" style="font-size: 0.8rem;">Mã HS: <span id="detail-roll">07</span></div>
+                            </div>
+                            
+                            <!-- Detailed Metrics -->
+                            <div class="row g-2 mb-4">
+                                <div class="col-6">
+                                    <div class="metric-card-mini">
+                                        <h6>Điểm tập trung</h6>
+                                        <span class="text-success" id="detail-focus-score">92%</span>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="metric-card-mini">
+                                        <h6>Vi phạm</h6>
+                                        <span class="text-danger" id="detail-distractions">2</span>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="metric-card-mini">
+                                        <h6>Trạng thái</h6>
+                                        <span class="text-primary" id="detail-attention">Cao</span>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="metric-card-mini">
+                                        <h6>Phiên học</h6>
+                                        <span class="text-info" id="detail-activity">Đang học</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Emotion Section -->
+                            <div class="custom-card p-3 mb-3" style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05);">
+                                <div class="d-flex align-items-center mb-2">
+                                    <h6 class="fw-semibold text-secondary mb-0" style="font-size: 0.8rem;"><i class="fa-solid fa-face-smile text-success me-1"></i>Phân tích cảm xúc học sinh</h6>
+                                </div>
+                                <div class="d-flex align-items-center gap-3 mb-2">
+                                    <span class="fs-2" id="detail-emotion-icon">😐</span>
+                                    <div>
+                                        <div class="fw-bold text-white mb-0" id="detail-emotion" style="font-size: 0.95rem;">Bình thường</div>
+                                        <div class="text-white-50" style="font-size: 0.75rem;">
+                                            Độ tin cậy: <strong class="text-success" id="detail-emotion-confidence">87%</strong>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="border-top pt-2 mt-2">
+                                    <div class="text-muted mb-1" style="font-size: 0.7rem;">Dòng thời gian cảm xúc (Lịch sử):</div>
+                                    <div class="d-flex align-items-center gap-1 w-100 flex-wrap" id="detail-emotion-timeline" style="min-height: 20px;">
+                                        <!-- Colored capsules -->
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- AI Learning Risk Analysis -->
+                            <div class="custom-card p-3 mb-3" style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05);">
+                                <div class="d-flex align-items-center justify-content-between mb-2">
+                                    <h6 class="fw-semibold text-secondary mb-0" style="font-size: 0.8rem;">
+                                        <i class="fa-solid fa-triangle-exclamation text-warning me-1"></i>Phân tích rủi ro học tập AI
+                                    </h6>
+                                    <span class="badge bg-success" id="detail-risk-level">Thấp</span>
+                                </div>
+                                <div class="d-flex align-items-center gap-3">
+                                    <div class="d-flex align-items-baseline">
+                                        <span class="fs-3 fw-bold text-white" id="detail-risk-score">0</span>
+                                        <span class="text-muted" style="font-size: 0.8rem;">/100</span>
+                                    </div>
+                                    <button class="btn btn-link p-0 text-muted ms-auto" data-bs-toggle="tooltip" data-bs-placement="top" id="risk-formula-tooltip" title="Điểm rủi ro = 40% Sử dụng điện thoại + 30% Ngủ gật + 20% Ngoảnh mặt đi + 10% Cảm xúc tiêu cực">
+                                        <i class="fa-regular fa-circle-question fs-6"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- AI Summary & Recommendations -->
+                            <div class="custom-card p-3 mb-3" style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05);">
+                                <h6 class="fw-semibold text-secondary mb-2" style="font-size: 0.8rem;">
+                                    <i class="fa-solid fa-brain text-info me-1"></i>Đánh giá & Đề xuất AI
+                                </h6>
+                                <p class="text-white-50 mb-0" id="detail-ai-summary" style="font-size: 0.8rem; line-height: 1.45;">
+                                    Đang phân tích dữ liệu học tập của học sinh...
+                                </p>
+                            </div>
+
+                            <!-- mini chart -->
+                            <h6 class="fw-semibold text-secondary mb-2" style="font-size: 0.8rem;">Lịch sử tập trung (10 cập nhật gần nhất)</h6>
+                            <div style="height: 120px;" class="mb-3">
+                                <canvas id="mini-student-chart"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- Realtime Warning Log Panel -->
+                        <div class="custom-card p-3">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h6 class="fw-bold mb-0 text-primary">Nhật ký hoạt động</h6>
+                                <a href="#" class="small text-decoration-none">Xem tất cả</a>
+                            </div>
+                            
+                            <div style="max-height: 250px; overflow-y: auto;" id="activity-log-list">
+                                <!-- Log items populated dynamically -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ========================================== -->
+                    <!-- OFFLINE CLASSROOM MODE LAYOUTS -->
+                    <!-- ========================================== -->
+
+                    <!-- Offline Left Main Area -->
+                    <div class="col-lg-8 col-md-12 class-mode-offline d-none">
+                        <!-- Offline Controls Card -->
+                        <div class="custom-card p-3 mb-4 d-flex justify-content-between align-items-center">
+                            <div class="d-flex align-items-center gap-3">
+                                <h6 class="mb-0 text-secondary">Giám sát Camera Lớp học:</h6>
+                                <span class="badge bg-danger-subtle text-danger border border-danger" id="offline-class-session-badge">Chưa bắt đầu</span>
+                            </div>
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-primary btn-sm px-3" id="btn-start-offline-class"><i class="fa-solid fa-play me-1"></i> Bắt đầu giám sát</button>
+                                <button class="btn btn-outline-danger btn-sm px-3" id="btn-end-offline-class" style="display: none;"><i class="fa-solid fa-stop me-1"></i> Kết thúc giám sát</button>
+                            </div>
+                        </div>
+
+                        <!-- Classroom Live Camera Card -->
+                        <div class="custom-card p-4 mb-4">
+                            <h5 class="card-title fw-bold mb-3"><i class="fa-solid fa-video text-primary me-2"></i>Camera Giám sát Lớp học Trực tiếp</h5>
+                            <div class="position-relative w-100" id="offline-video-container" style="border-radius: 12px; overflow: hidden; background: #0b0f19; aspect-ratio: 16/9;">
+                                <!-- Live video stream -->
+                                <img id="offline-classroom-video" src="" alt="Classroom Live Feed" style="width: 100%; height: 100%; object-fit: cover; opacity: 0.85; transition: opacity 0.3s;">
+                                <!-- Bounding box container overlays -->
+                                <div id="offline-bounding-boxes" style="position: absolute; inset: 0; pointer-events: none; z-index: 10;">
+                                    <!-- Bounding boxes drawn dynamically by JS -->
+                                </div>
+                                <div class="card-header-overlay align-items-center">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <div class="live-badge">
+                                            <div class="pulse-dot"></div>TRỰC TIẾP (CAMERA LỚP HỌC)
+                                        </div>
+                                        <span class="badge bg-dark bg-opacity-75" id="offline-camera-fps-badge">AI: YOLOv8 + MediaPipe</span>
+                                    </div>
+                                    <button class="btn btn-dark btn-sm bg-opacity-75 border-0 rounded-circle d-flex align-items-center justify-content-center" id="btn-fullscreen-offline-camera" title="Toàn màn hình" style="width: 32px; height: 32px; pointer-events: auto; cursor: pointer; transition: transform 0.2s;">
+                                        <i class="fa-solid fa-expand text-white"></i>
+                                    </button>
+                                </div>
+                                <!-- Background overlay when session not active -->
+                                <div class="camera-overlay" id="offline-camera-inactive-overlay">
+                                    <div class="text-center text-white">
+                                        <i class="fa-solid fa-video-slash fs-2 mb-2 text-secondary"></i>
+                                        <p class="mb-0 small">Bấm "Bắt đầu giám sát" để kết nối Camera Lớp học</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- AI Classroom Analysis & Suggestions -->
+                        <div class="row g-4">
+                            <div class="col-md-6 col-sm-12">
+                                <div class="custom-card p-3 h-100 border-start border-info border-4" style="background: rgba(13, 202, 240, 0.05); min-height: 200px;">
+                                    <h6 class="fw-bold text-info mb-3"><i class="fa-solid fa-brain me-2"></i>Phân tích Lớp học AI</h6>
+                                    <div id="offline-ai-analysis-container" class="small">
+                                        <!-- Will be populated dynamically -->
+                                        <p class="text-muted mb-0">Chờ dữ liệu phân tích lớp học...</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6 col-sm-12">
+                                <div class="custom-card p-3 h-100 border-start border-warning border-4" style="background: rgba(245, 158, 11, 0.05); min-height: 200px;">
+                                    <h6 class="fw-bold text-warning mb-3"><i class="fa-solid fa-lightbulb me-2"></i>Gợi ý cho Giáo viên</h6>
+                                    <div id="offline-suggestions-container" class="small">
+                                        <!-- Will be populated dynamically -->
+                                        <p class="text-muted mb-0">Chờ gợi ý giảng dạy từ AI...</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Offline Right Panel Area -->
+                    <div class="col-lg-4 col-md-12 class-mode-offline d-none">
+                        <!-- Offline Class Session Time Counter -->
+                        <div class="custom-card p-3 mb-4 text-center">
+                            <h6 class="text-secondary text-uppercase mb-2" style="font-size: 0.75rem; letter-spacing: 0.05em;">Thời gian tiết học</h6>
+                            <h2 class="fw-bold text-primary mb-0" id="offline-class-timer">00:00:00</h2>
+                            <small class="text-muted">Giám sát lớp học truyền thống</small>
+                        </div>
+
+                        <!-- Classroom Statistics Card -->
+                        <div class="custom-card p-3 mb-4">
+                            <h6 class="fw-bold text-primary mb-3"><i class="fa-solid fa-chart-pie me-2"></i>Thống kê Lớp học</h6>
+                            <div class="row g-2">
+                                <div class="col-6">
+                                    <div class="metric-card-mini p-2">
+                                        <h6 class="small text-muted mb-1" style="font-size:0.7rem;">Sĩ số hiện diện</h6>
+                                        <span class="text-success fw-bold fs-5" id="offline-stat-present">28</span>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="metric-card-mini p-2">
+                                        <h6 class="small text-muted mb-1" style="font-size:0.7rem;">Phân tâm</h6>
+                                        <span class="text-danger fw-bold fs-5" id="offline-stat-distracted">0</span>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="metric-card-mini p-2">
+                                        <h6 class="small text-muted mb-1" style="font-size:0.7rem;">Buồn ngủ</h6>
+                                        <span class="text-warning fw-bold fs-5" id="offline-stat-drowsy">0</span>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="metric-card-mini p-2">
+                                        <h6 class="small text-muted mb-1" style="font-size:0.7rem;">Điểm tập trung</h6>
+                                        <span class="text-primary fw-bold fs-5" id="offline-stat-focus">95%</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Classroom AI Twin Card -->
+                        <div class="custom-card p-3 mb-4">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h6 class="fw-bold text-primary mb-0"><i class="fa-solid fa-sitemap me-2"></i>Bản đồ AI Lớp học (AI Twin)</h6>
+                                <span class="badge bg-secondary" style="font-size: 0.65rem;">Ghế 4x7</span>
+                            </div>
+                            <div class="text-center mb-3 py-1 bg-dark bg-opacity-25 text-muted rounded small" style="font-size: 0.7rem;">BẢNG ĐEN / GIÁO VIÊN VẬT LÝ</div>
+                            
+                            <!-- Seating layout grid for offline classroom twin -->
+                            <div id="offline-classroom-twin-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; max-width: 320px; margin: 0 auto;">
+                                <!-- Dynamically populated desks -->
+                            </div>
+                            
+                            <!-- Legend -->
+                            <div class="d-flex flex-wrap justify-content-between align-items-center mt-3 pt-2 border-top border-secondary" style="font-size: 0.65rem; color: var(--text-secondary); gap: 4px;">
+                                <span>🟢 Tập trung</span>
+                                <span>🟡 Phân tâm</span>
+                                <span>🔴 Điện thoại</span>
+                                <span>😴 Buồn ngủ</span>
+                            </div>
+                        </div>
+
+                        <!-- Offline Realtime Activity Log Panel -->
+                        <div class="custom-card p-3">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h6 class="fw-bold mb-0 text-primary">Nhật ký hoạt động</h6>
+                                <span class="badge bg-primary bg-opacity-10 text-primary small">Thời gian thực</span>
+                            </div>
+                            <div style="max-height: 180px; overflow-y: auto;" id="offline-activity-log-list">
+                                <!-- Log items populated dynamically -->
+                                <p class="text-muted text-center small py-3">Nhật ký hoạt động trống</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 2: Students List -->
+                <div id="section-teacher-students" class="row g-4 {% if active_tab != 'students' %}d-none{% endif %}">
+                    <div class="col-12">
+                        <div class="custom-card p-4">
+                            <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+                                <h5 class="fw-bold mb-0 text-primary"><i class="fa-solid fa-graduation-cap me-2"></i>Danh sách học sinh lớp {{ class_name }}</h5>
+                                <div class="d-flex gap-2 align-items-center" style="max-width: 350px; width: 100%;">
+                                    <div class="input-group">
+                                        <span class="input-group-text bg-transparent border-end-0 text-muted"><i class="fa-solid fa-magnifying-glass"></i></span>
+                                        <input type="text" class="form-control border-start-0" id="search-students" placeholder="Tìm tên học sinh...">
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle">
+                                    <thead>
+                                        <tr>
+                                            <th>Mã HS</th>
+                                            <th>Học sinh</th>
+                                            <th>Trạng thái</th>
+                                            <th class="text-center">Điểm tập trung TB</th>
+                                            <th class="text-center">Số lần vi phạm</th>
+                                            <th>Thời gian học</th>
+                                            <th class="text-end">Hành động</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="teacher-students-table-body">
+                                        <!-- Will be populated dynamically -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 3: Analytics -->
+                <div id="section-teacher-analytics" class="row g-4 {% if active_tab != 'analytics' %}d-none{% endif %}">
+                    <div class="col-12">
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-3">
+                                <div class="custom-card p-3 text-center">
+                                    <h6 class="text-secondary small mb-1">Điểm tập trung TB lớp</h6>
+                                    <h3 class="fw-bold text-success mb-0" id="analytics-avg-score">85%</h3>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="custom-card p-3 text-center">
+                                    <h6 class="text-secondary small mb-1">Học sinh tập trung nhất</h6>
+                                    <h3 class="fw-bold text-primary mb-0" id="analytics-best-student">Trần Thị Bình</h3>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="custom-card p-3 text-center">
+                                    <h6 class="text-secondary small mb-1">Tổng vi phạm trong lớp</h6>
+                                    <h3 class="fw-bold text-danger mb-0" id="analytics-total-distractions">12</h3>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="custom-card p-3 text-center">
+                                    <h6 class="text-secondary small mb-1">Mức độ tập trung lớp</h6>
+                                    <h3 class="fw-bold text-info mb-0">Tốt</h3>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row g-4">
+                            <div class="col-md-6">
+                                <div class="custom-card p-4">
+                                    <h5 class="fw-bold text-primary mb-4"><i class="fa-solid fa-chart-line me-2"></i>Biến động tập trung trung bình lớp</h5>
+                                    <div style="height: 300px;">
+                                        <canvas id="analytics-trend-chart"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="custom-card p-4">
+                                    <h5 class="fw-bold text-primary mb-4"><i class="fa-solid fa-chart-bar me-2"></i>Phân tích loại vi phạm</h5>
+                                    <div style="height: 300px;">
+                                        <canvas id="analytics-types-chart"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- New Analytics Row: Watchlist, Danger Hour & Root Cause -->
+                        <div class="row g-4 mt-2">
+                            <!-- Watchlist -->
+                            <div class="col-md-4">
+                                <div class="custom-card p-4 h-100">
+                                    <h5 class="fw-bold text-danger mb-4"><i class="fa-solid fa-triangle-exclamation me-2"></i>Học sinh cần lưu ý (&lt;70 điểm)</h5>
+                                    <div class="table-responsive" style="max-height: 250px; overflow-y: auto;">
+                                        <table class="table table-sm table-borderless text-white align-middle mb-0">
+                                            <thead>
+                                                <tr class="text-muted small">
+                                                    <th>Học sinh</th>
+                                                    <th class="text-end">Độ tập trung</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="watchlist-body">
+                                                <!-- Dynamic watchlist items -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Danger Hour and general stats -->
+                            <div class="col-md-4">
+                                <div class="custom-card p-4 h-100">
+                                    <h5 class="fw-bold text-warning mb-4"><i class="fa-solid fa-clock me-2"></i>Khung giờ nguy hiểm</h5>
+                                    <div class="text-center py-4">
+                                        <div class="display-6 fw-bold text-warning mb-2" id="danger-hour-value">Chưa xác định</div>
+                                        <p class="text-muted small">Khung giờ có chỉ số tập trung lớp học thấp nhất lịch sử</p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Class-wide Root Cause Pie/Donut Chart -->
+                            <div class="col-md-4">
+                                <div class="custom-card p-4 h-100">
+                                    <h5 class="fw-bold text-primary mb-4"><i class="fa-solid fa-chart-pie me-2"></i>Tỷ lệ nguyên nhân mất tập trung</h5>
+                                    <div style="height: 200px; position: relative;">
+                                        <canvas id="classRootCauseChart"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 4: Reports -->
+                <div id="section-teacher-reports" class="row g-4 {% if active_tab != 'reports' %}d-none{% endif %}">
+                    <div class="col-12">
+                        <div class="custom-card p-4 mb-4">
+                            <div class="d-flex justify-content-between align-items-center mb-4">
+                                <h5 class="fw-bold text-primary mb-0"><i class="fa-solid fa-file-invoice-dollar me-2"></i>Báo cáo hiệu suất lớp học</h5>
+                                <button class="btn btn-primary btn-sm"><i class="fa-solid fa-file-export me-1"></i>Xuất Excel (.xlsx)</button>
+                            </div>
+                            
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle">
+                                    <thead>
+                                        <tr>
+                                            <th>Ngày tạo</th>
+                                            <th>Tiết học / Tên bài giảng</th>
+                                            <th class="text-center">Sỉ số</th>
+                                            <th class="text-center">Độ tập trung TB</th>
+                                            <th class="text-center">Tổng vi phạm</th>
+                                            <th>Trạng thái</th>
+                                            <th class="text-end">Hành động</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td>20/05/2026</td>
+                                            <td>Tin học 10 - Lập trình Python cơ bản</td>
+                                            <td class="text-center">28/28</td>
+                                            <td class="text-center text-success fw-bold">84%</td>
+                                            <td class="text-center text-danger fw-bold">14</td>
+                                            <td><span class="badge bg-success-subtle text-success">Đã hoàn tất</span></td>
+                                            <td class="text-end">
+                                                <button class="btn btn-outline-primary btn-sm me-1" title="Xem chi tiết"><i class="fa-solid fa-eye"></i></button>
+                                                <button class="btn btn-outline-danger btn-sm" title="Tải báo cáo"><i class="fa-solid fa-download"></i></button>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td>19/05/2026</td>
+                                            <td>Tin học 10 - Khái niệm Cơ sở dữ liệu</td>
+                                            <td class="text-center">27/28</td>
+                                            <td class="text-center text-success fw-bold">88%</td>
+                                            <td class="text-center text-danger fw-bold">8</td>
+                                            <td><span class="badge bg-success-subtle text-success">Đã hoàn tất</span></td>
+                                            <td class="text-end">
+                                                <button class="btn btn-outline-primary btn-sm me-1" title="Xem chi tiết"><i class="fa-solid fa-eye"></i></button>
+                                                <button class="btn btn-outline-danger btn-sm" title="Tải báo cáo"><i class="fa-solid fa-download"></i></button>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 5: Alerts -->
+                <div id="section-teacher-alerts" class="row g-4 {% if active_tab != 'alerts' %}d-none{% endif %}">
+                    <div class="col-12">
+                        <div class="custom-card p-4">
+                            <h5 class="fw-bold text-primary mb-4"><i class="fa-solid fa-bell me-2"></i>Lịch sử cảnh báo vi phạm của lớp</h5>
+                            
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle">
+                                    <thead>
+                                        <tr>
+                                            <th>Thời gian</th>
+                                            <th>Học sinh</th>
+                                            <th>Loại vi phạm</th>
+                                            <th>Mức độ</th>
+                                            <th>Trạng thái</th>
+                                            <th class="text-end">Hành động</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="teacher-alerts-table-body">
+                                        <!-- Will be populated dynamically -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 6: Settings -->
+                <div id="section-teacher-settings" class="row g-4 {% if active_tab != 'settings' %}d-none{% endif %}">
+                    <div class="col-md-6 col-sm-12">
+                        <div class="custom-card p-4">
+                            <h5 class="fw-bold text-primary mb-4"><i class="fa-solid fa-gear me-2"></i>Thiết lập lớp học</h5>
+                            
+                            <form id="teacher-settings-form">
+                                <div class="mb-3">
+                                    <label class="form-label small text-secondary">Tên giáo viên</label>
+                                    <input type="text" class="form-control" id="teacher-display-name" value="{{ teacher_name }}">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label small text-secondary">Lớp học phụ trách</label>
+                                    <input type="text" class="form-control" value="{{ class_name }}" readonly>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label small text-secondary">Ngưỡng tập trung tối thiểu (%)</label>
+                                    <input type="number" class="form-control" id="teacher-min-focus" value="65">
+                                    <div class="form-text small">Học sinh dưới ngưỡng này sẽ hiển thị cảnh báo đỏ/vàng trên màn hình giám sát.</div>
+                                </div>
+                                <button type="submit" class="btn btn-primary"><i class="fa-solid fa-save me-1"></i>Lưu cấu hình</button>
+                            </form>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6 col-sm-12">
+                        <div class="custom-card p-4">
+                            <h5 class="fw-bold text-primary mb-4"><i class="fa-solid fa-shield-halved me-2"></i>Cấu hình AI & Âm thanh</h5>
+                            
+                            <div class="form-check form-switch mb-3">
+                                <input class="form-check-input" type="checkbox" id="teacher-setting-sound" checked>
+                                <label class="form-check-label small" for="teacher-setting-sound">Phát âm thanh cảnh báo khi phát hiện học sinh ngủ gật hoặc dùng điện thoại</label>
+                            </div>
+                            
+                            <div class="form-check form-switch mb-3">
+                                <input class="form-check-input" type="checkbox" id="teacher-setting-notification" checked>
+                                <label class="form-check-label small" for="teacher-setting-notification">Hiển thị thông báo trình duyệt (Browser notification)</label>
+                            </div>
+                            
+                            <div class="form-check form-switch mb-3">
+                                <input class="form-check-input" type="checkbox" id="teacher-setting-auto-record" checked>
+                                <label class="form-check-label small" for="teacher-setting-auto-record">Tự động ghi hình phiên học có vi phạm</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Section 7: AI Attendance -->
+                <div id="section-teacher-attendance" class="row g-4 {% if active_tab != 'attendance' %}d-none{% endif %}">
+                    <div class="col-12">
+                        <div class="custom-card p-4">
+                            <h5 class="fw-bold text-primary mb-4"><i class="fa-solid fa-clipboard-user me-2"></i>Điểm danh thông minh bằng AI</h5>
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle">
+                                    <thead>
+                                        <tr>
+                                            <th>Mã HS</th>
+                                            <th>Học sinh</th>
+                                            <th>Trạng thái Điểm danh</th>
+                                            <th>Thời gian nhận diện</th>
+                                            <th>Hình thức nhận diện</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="attendance-table-body">
+                                        <!-- Will be populated dynamically -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Floating AI Voice Assistant Widget -->
+    <div class="position-fixed" style="bottom: 30px; right: 30px; z-index: 1040;">
+        <button class="btn btn-primary rounded-circle shadow-lg d-flex align-items-center justify-content-center" id="btn-voice-assistant" style="width: 56px; height: 56px; transition: transform 0.2s;" title="Trợ lý ảo giọng nói AI">
+            <i class="fa-solid fa-microphone fs-4"></i>
+        </button>
+        <!-- Dialogue popover -->
+        <div class="card p-3 shadow bg-glass text-white d-none" id="voice-assistant-card" style="position: absolute; bottom: 70px; right: 0; width: 280px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.1);">
+            <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom border-secondary">
+                <small class="fw-bold text-primary"><i class="fa-solid fa-robot me-1"></i> Trợ lý ảo AI</small>
+                <button type="button" class="btn-close btn-close-white" style="font-size: 0.7rem;" onclick="document.getElementById('voice-assistant-card').classList.add('d-none')"></button>
+            </div>
+            <p class="mb-2 small" id="voice-prompt-text" style="color: #cbd5e1;">Bấm mic và hỏi "Lớp hôm nay thế nào?"</p>
+            <p class="mb-0 small fw-bold text-success d-none" id="voice-response-text"></p>
+        </div>
+    </div>
+
+    <!-- AI End-of-Class Summary Modal -->
+    <div class="modal fade" id="classSummaryModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 bg-dark text-white" style="border-radius: 20px; box-shadow: 0 15px 40px rgba(0,0,0,0.5);">
+                <div class="modal-header border-bottom border-secondary">
+                    <h5 class="modal-title fw-bold text-primary"><i class="fa-solid fa-brain me-2"></i>Tóm tắt lớp học thông minh AI</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body text-center p-4">
+                    <div class="mb-4">
+                        <div class="p-3 bg-primary bg-opacity-10 rounded-pill d-inline-block text-primary fs-3">
+                            <i class="fa-solid fa-graduation-cap"></i>
+                        </div>
+                    </div>
+                    <div class="row g-3 mb-4 text-start">
+                        <div class="col-6">
+                            <div class="p-3 bg-secondary bg-opacity-10 rounded-3">
+                                <small class="text-muted d-block">Điểm trung bình</small>
+                                <strong class="fs-4 text-success" id="summary-avg-score">0/100</strong>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="p-3 bg-secondary bg-opacity-10 rounded-3">
+                                <small class="text-muted d-block">Giờ mất tập trung nhất</small>
+                                <strong class="fs-6 text-warning d-block mt-1" id="summary-danger-hour">Chưa có</strong>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="p-3 rounded-3 text-start mb-3" style="background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.15);">
+                        <p class="mb-0 small" id="summary-text-content">Đang tổng hợp dữ liệu lớp học...</p>
+                    </div>
+                </div>
+                <div class="modal-footer border-top border-secondary">
+                    <button type="button" class="btn btn-primary rounded-pill px-4" data-bs-dismiss="modal">Hoàn tất</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS Bundle -->
+    <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
+    <script>
+        // Store session variables for dashboard routing logic
+        window.userRole = "{{ session.get('role') }}";
+        window.userClassId = "{{ session.get('class_id') }}";
+        window.ACTIVE_TAB = "{{ active_tab }}";
+        window.DISPLAY_NAME = "{{ session.get('display_name', '') }}";
+    </script>
+    <!-- Socket.IO Client -->
+    <script src="{{ url_for('static', filename='js/socket.io.min.js') }}"></script>
+    <!-- Custom JS code -->
+    <script src="{{ url_for('static', filename='js/main.js') }}?v=1.3"></script>
+</body>
+</html>

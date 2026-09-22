@@ -1,0 +1,12 @@
+venv/
+*.db
+__pycache__/
+*.pyc
+.DS_Store
+.vscode/
+.idea/
+.gemini/
+node_modules/
+*-debug.log
+*_emulator.log
+node_modules
