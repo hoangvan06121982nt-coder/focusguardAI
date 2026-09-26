@@ -29,7 +29,7 @@ từ dữ liệu thật. Mọi tuyên bố về "AI" được giới hạn ở n
 * Độ chính xác thực tế: **NOT_EVALUATED**. Phần cứng: **HARDWARE_REQUIRED**.
 
 ## Kết quả kiểm thử (máy local, `bash scripts/ci_check.sh`)
-104 passed, 0 failed, 3 skipped (HARDWARE_REQUIRED).
+120 passed, 0 failed, 3 skipped (HARDWARE_REQUIRED).
 
 ## Việc còn lại
 1. Thu thập bộ dữ liệu lớp học thật có nhãn và có đồng ý → chạy `scripts/run_evaluation.py --real-dataset`.
