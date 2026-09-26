@@ -9,6 +9,27 @@ Có bốn vai trò: **Học sinh**, **Giáo viên**, **Phụ huynh**, **Quản t
 > Hệ thống **không** nhận diện cảm xúc và **không** đo hướng nhìn (gaze). Độ chính xác trên dữ liệu lớp học
 > thật: **NOT_EVALUATED** (chưa có bộ dữ liệu có nhãn). Xem [docs/PRIVACY_AND_AI_SAFETY.md](docs/PRIVACY_AND_AI_SAFETY.md).
 
+## Trạng thái bản thi
+
+**Đã kiểm chứng**
+* Kiến trúc lõi (IdentityManager, FocusEngine duy nhất theo thời gian, SessionRuntime, realtime do máy chủ quyết định,
+  phân quyền theo quyền sở hữu): `bash scripts/ci_check.sh`, 126 test pass, GitHub Actions xanh.
+* Bảo mật và repo công khai: `scripts/security_check.py` PASS trên tree hiện tại.
+* Firestore backend **trên emulator**: `bash scripts/firestore_emulator_check.sh` (6 test hợp đồng).
+* Model thật trên macOS Apple Silicon: YOLOv8, MediaPipe và InsightFace load được, và cả hai pipeline camera khởi tạo được.
+
+**Chưa kiểm chứng / chưa đánh giá**
+* Chạy với webcam thật: chưa chạy xong. Quy trình và công cụ ở `docs/REAL_CAMERA_VERIFICATION.md` và
+  `tools/real_camera_check.py`. Trên macOS, lệnh phải chạy từ Terminal.app vì cần quyền Camera.
+* Độ chính xác ngoài thực tế: **NOT_EVALUATED** (chưa có bộ dữ liệu có nhãn và có sự đồng ý).
+* Firestore production (Cloud): chưa kiểm tra.
+
+**Hạn chế đã biết**
+* Lịch sử git cũ còn tài sản nhạy cảm (ảnh khuôn mặt, export emulator, `.env` cũ, khoá giả của emulator). Không viết lại
+  lịch sử trong nhánh này; xem `docs/PRIVACY_AND_AI_SAFETY.md`.
+* `mediapipe` kéo theo `opencv-contrib-python` 5.x, đè lên bản `opencv-python` 4.13 được pin.
+* Xem thêm mục Known limitations trong `PR_DESCRIPTION.md`.
+
 ## Kiến trúc
 
 ```

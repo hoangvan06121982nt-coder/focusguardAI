@@ -53,6 +53,8 @@ Camera → YOLOv8+ByteTrack (temporary track_id) → InsightFace → IdentityMan
   Results labelled **SYNTHETIC**; real-world **NOT_EVALUATED**.
 - **Public repo hygiene**: `.env`, `data/`, Firebase emulator export and a face photo are no longer tracked;
   `scripts/security_check.py` guards the current tree in CI.
+- **Verification tooling**: `tools/real_camera_check.py` (guided webcam scenarios; no images stored,
+  embeddings erased afterwards), `scripts/firestore_emulator_check.sh`.
 - **Docs**: README, SUMMARY, `docs/COMPETITION_ARCHITECTURE.md`, `docs/DEMO_SCRIPT.md`,
   `docs/PRIVACY_AND_AI_SAFETY.md`, `docs/REAL_CAMERA_VERIFICATION.md`.
 
@@ -78,7 +80,16 @@ Camera → YOLOv8+ByteTrack (temporary track_id) → InsightFace → IdentityMan
 
 ## Verification
 - `bash scripts/ci_check.sh`: compile, imports, pytest, JS syntax, security scan, synthetic evaluation.
-- **120 passed / 0 failed / 3 skipped (HARDWARE_REQUIRED)**.
+- **126 passed / 0 failed / 9 skipped** (3 HARDWARE_REQUIRED, 6 EMULATOR_REQUIRED).
+- **Firestore on the emulator**: `bash scripts/firestore_emulator_check.sh`, 6/6 passed (accounts and hashing,
+  migration, membership, embeddings, sessions/events/snapshots/session_students, full class lifecycle); the app
+  also logs in and runs a class on the emulator. Firestore production has not been tested.
+- **Real models on Apple Silicon (arm64, Python 3.12)**: `requirements.txt` installs; YOLOv8, MediaPipe and
+  InsightFace load (2 of the 3 hardware tests pass); both camera pipelines initialise and degrade to
+  NO_CAMERA_SIGNAL without crashing.
+- **Webcam not verified yet**: macOS denies camera access to processes started by the Claude app, so the camera
+  test and the real-camera scenarios must be run from Terminal.app
+  (`tools/real_camera_check.py`, see `docs/REAL_CAMERA_VERIFICATION.md`). **Do not merge before that run passes.**
 - **GitHub Actions: PASS** (see the checks on this PR).
 - Manual smoke test in a browser (dev server + SQLite): teacher, student, parent and admin pages render with
   no console errors; the authenticated socket connects; empty data shows N/A; an XSS payload in a display
@@ -92,9 +103,9 @@ Camera → YOLOv8+ByteTrack (temporary track_id) → InsightFace → IdentityMan
   `DEMO_ACCOUNT_PASSWORD`, default `123`). Set `FOCUSGUARD_ENV=production` for deployments.
 
 ## Remaining blockers (not solved by this PR)
-1. **Real webcam**: hardware tests and the 9 scenarios in `docs/REAL_CAMERA_VERIFICATION.md` have not been run.
+1. **Real webcam**: the camera hardware test and the scenarios in `docs/REAL_CAMERA_VERIFICATION.md` have not been run yet (guided harness: `tools/real_camera_check.py`).
 2. **Labelled real-world dataset**: accuracy is `NOT_EVALUATED`.
-3. **Firestore**: backend not verified against the emulator (`FIRESTORE_NOT_VERIFIED`); SQLite is the tested backend.
+3. **Firestore**: verified on the emulator only; production Firestore has not been tested.
 4. **Old git history** still contains sensitive artifacts (face photo, emulator export with demo accounts,
    `.env`, session files, a dummy emulator private key). History was intentionally not rewritten here.
 
