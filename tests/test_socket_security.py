@@ -10,8 +10,10 @@ def sio(app_bundle):
 
 
 def connect(app, sio, username, password="123"):
-    from tests.conftest import login
-    flask_client = login(app, username, password)
+    # conftest.login is loaded by path-independent import: a third-party wheel
+    # may ship its own top-level "tests" package in site-packages.
+    import conftest
+    flask_client = conftest.login(app, username, password)
     return sio.test_client(app, flask_test_client=flask_client)
 
 

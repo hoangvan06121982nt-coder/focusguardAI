@@ -167,15 +167,14 @@ Chưa có công cụ đo tự động, nên phần hiệu năng vẫn là `HARDW
 * Chỉ thu dữ liệu khi có **đồng ý bằng văn bản** của học sinh và phụ huynh. Lưu trong `evaluation/private/` hoặc
   `evaluation/datasets/` (đã git-ignore). **Không commit** video, ảnh khuôn mặt hay nhãn chứa danh tính thật.
 
-## 7. Firestore (chưa xác minh)
-Backend Firestore chưa có test tự động, trạng thái: **FIRESTORE_NOT_VERIFIED**. Kiểm tra tay với emulator
-(cần Java và `npm install` để có `firebase-tools`):
+## 7. Firestore (emulator)
+Backend Firestore được kiểm tra **trên emulator** bằng bộ test hợp đồng `tests/firestore/`: tài khoản, hash và migrate
+mật khẩu, lớp và thành viên lớp, embedding khuôn mặt, `sessions`, `class_sessions`, `session_students`,
+`focus_events`, `focus_snapshots`, và vòng đời một buổi học qua `SessionManager`.
 
 ```bash
-npx firebase emulators:start --only firestore          # terminal 1 (cổng 8080 theo firebase.json)
-DATABASE_TYPE=firestore USE_EMULATOR=true FOCUSGUARD_ENV=development python app.py   # terminal 2
+bash scripts/firestore_emulator_check.sh      # cần Java 11+ và Node; dùng project demo-focusguard (chỉ emulator)
 ```
 
-Sau đó lặp lại kịch bản 1, 4 và 9, và kiểm tra các collection `focus_events`, `session_students`, `class_sessions`
-trong Emulator UI. Lưu ý: dữ liệu emulator cũ (nếu import từ `data/firebase`) có mật khẩu plaintext, và sẽ được hash lại
-khi app khởi động.
+Bộ test tự từ chối chạy nếu thiếu `FIRESTORE_EMULATOR_HOST` hoặc project không bắt đầu bằng `demo-`, nên không thể
+ghi vào Firestore production. **Firestore production (Cloud) chưa được kiểm tra.**
