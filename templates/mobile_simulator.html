@@ -254,115 +254,50 @@
         </div>
     </div>
 
-    <!-- Scrollable Screen Content -->
+    <!-- Scrollable Screen Content (all values loaded from the server; "—" = no data) -->
     <div class="app-content">
-        <!-- TAB 1: HOME -->
         <div class="tab-panel active" id="tab-home">
             <div class="app-header">
                 <h4>Bảng điều khiển</h4>
-                <span>Hôm nay</span>
+                <span>Dữ liệu thật</span>
             </div>
-            
             <div class="score-circle-container mt-3">
-                <div class="score-val" id="mob-score">84</div>
-                <div class="score-label">Điểm tập trung con</div>
-                <div class="status-pill">
-                    <span class="pulse-dot"></span> Đang học • Tập trung
-                </div>
+                <div class="score-val" id="mob-score">—</div>
+                <div class="score-label" id="mob-score-label">Điểm tập trung</div>
+                <div class="status-pill"><span id="mob-status">Chưa có dữ liệu</span></div>
             </div>
-
             <div class="row mt-3 d-flex flex-column gap-3">
                 <div class="mobile-card">
                     <div class="mobile-card-icon"><i class="fa-solid fa-hourglass-half"></i></div>
-                    <div class="mobile-card-details">
-                        <h6>Thời lượng tích luỹ</h6>
-                        <h4>02:15:40</h4>
-                    </div>
+                    <div class="mobile-card-details"><h6>Thời lượng tự học tích luỹ</h6><h4 id="mob-total-time">—</h4></div>
                 </div>
                 <div class="mobile-card">
                     <div class="mobile-card-icon danger"><i class="fa-solid fa-circle-exclamation"></i></div>
-                    <div class="mobile-card-details">
-                        <h6>Số lần xao nhãng</h6>
-                        <h4 id="mob-distractions">3 lần</h4>
-                    </div>
+                    <div class="mobile-card-details"><h6>Sự kiện hành vi (phiên hiện tại)</h6><h4 id="mob-distractions">—</h4></div>
                 </div>
             </div>
         </div>
 
-        <!-- TAB 2: ANALYTICS -->
         <div class="tab-panel" id="tab-analytics">
-            <div class="app-header">
-                <h4>Phân tích con</h4>
-            </div>
-            
+            <div class="app-header"><h4>Phân tích</h4></div>
             <div class="mobile-card">
-                <div class="mobile-card-icon success"><i class="fa-solid fa-bullseye"></i></div>
-                <div class="mobile-card-details">
-                    <h6>Tỷ lệ nhìn màn hình</h6>
-                    <h4>92%</h4>
-                </div>
-            </div>
-            <div class="mobile-card mt-3">
                 <div class="mobile-card-icon danger"><i class="fa-solid fa-shoe-prints"></i></div>
-                <div class="mobile-card-details">
-                    <h6>Vắng mặt khỏi ghế</h6>
-                    <h4 id="mob-seat-leaving">2 lần (8 phút)</h4>
-                </div>
+                <div class="mobile-card-details"><h6>Rời chỗ (phiên hiện tại)</h6><h4 id="mob-seat-leaving">—</h4></div>
             </div>
             <div class="mobile-card mt-3">
                 <div class="mobile-card-icon"><i class="fa-solid fa-calendar-check"></i></div>
-                <div class="mobile-card-details">
-                    <h6>Tỷ lệ chuyên cần tuần</h6>
-                    <h4>96%</h4>
-                </div>
+                <div class="mobile-card-details"><h6>Chuyên cần (buổi học lớp)</h6><h4 id="mob-attendance">—</h4></div>
             </div>
         </div>
 
-        <!-- TAB 3: LOGS -->
         <div class="tab-panel" id="tab-logs">
-            <div class="app-header">
-                <h4>Nhật ký vi phạm</h4>
-            </div>
-            
-            <div class="log-container mt-2">
-                <div class="log-item danger">
-                    <div class="log-header">
-                        <span class="log-title">Sử dụng điện thoại</span>
-                        <span class="log-time">15:32</span>
-                    </div>
-                    <p class="log-desc">Phát hiện dùng điện thoại trong tiết học Toán</p>
-                </div>
-                <div class="log-item">
-                    <div class="log-header">
-                        <span class="log-title">Rời vị trí</span>
-                        <span class="log-time">15:10</span>
-                    </div>
-                    <p class="log-desc">Học sinh vắng mặt khỏi camera 4 phút</p>
-                </div>
-                <div class="log-item info">
-                    <div class="log-header">
-                        <span class="log-title">Chuyên cần</span>
-                        <span class="log-time">14:00</span>
-                    </div>
-                    <p class="log-desc">Điểm danh thành công lớp 10A1: Có mặt</p>
-                </div>
-            </div>
+            <div class="app-header"><h4>Buổi học gần đây</h4></div>
+            <div class="log-container mt-2" id="mob-logs"><p class="log-desc">Chưa có dữ liệu.</p></div>
         </div>
 
-        <!-- TAB 4: COACH -->
         <div class="tab-panel" id="tab-coach">
-            <div class="app-header">
-                <h4>AI Coach gợi ý</h4>
-            </div>
-            
-            <div class="coach-box mt-2">
-                <p class="coach-text">
-                    Dựa trên học máy phân tích thói quen: Nguyễn Văn An học tập tập trung nhất vào khung giờ <b>08:00 - 10:00</b> sáng. Mức độ mệt mỏi tăng cao sau phút thứ 45. Đề xuất: Đặt lịch nghỉ giải lao 5 phút định kỳ Pomodoro.
-                </p>
-                <div style="background-color: rgba(255,255,255,0.04); padding: 12px; border-radius: 12px; font-size: 0.8rem; color: #3b82f6; text-align: center; border: 1px dashed rgba(59,130,246,0.3)">
-                    <i class="fa-solid fa-lightbulb me-1"></i> Gợi ý: Bật chế độ ban đêm trước 22:00
-                </div>
-            </div>
+            <div class="app-header"><h4>Gợi ý khung giờ</h4></div>
+            <div class="coach-box mt-2"><p class="coach-text" id="mob-coach">Không đủ dữ liệu.</p></div>
         </div>
     </div>
 
@@ -381,8 +316,8 @@
             <span>Nhật ký</span>
         </button>
         <button class="tab-btn" onclick="switchTab('coach', this)">
-            <i class="fa-solid fa-brain"></i>
-            <span>AI Coach</span>
+            <i class="fa-solid fa-lightbulb"></i>
+            <span>Gợi ý</span>
         </button>
     </div>
 
@@ -408,22 +343,54 @@
             el.classList.add('active');
         }
 
-        // Periodically fetch live stats from parent portal / API
+        const esc = v => String(v === null || v === undefined ? '' : v).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+        async function getJson(url) {
+            const res = await fetch(url);
+            if (!res.ok) return null;
+            return res.json();
+        }
         async function fetchLiveStats() {
             try {
-                const res = await fetch('/api/stats');
-                const data = await res.json();
-                if (data.focus_score !== undefined) {
-                    document.getElementById('mob-score').innerText = data.focus_score;
-                    document.getElementById('mob-distractions').innerText = data.distractions + ' lần';
-                    document.getElementById('mob-seat-leaving').innerText = data.seat_leaving_count + ' lần (' + Math.round(data.seat_leaving_duration / 60) + ' phút)';
+                const live = await getJson('/api/stats');   // students only; parents get 403
+                if (live && live.is_active) {
+                    document.getElementById('mob-score').innerText = live.focus_score === null ? '—' : live.focus_score;
+                    document.getElementById('mob-score-label').innerText = 'Điểm tập trung hiện tại';
+                    document.getElementById('mob-status').innerText = (live.labels && live.labels.focus) || 'Chưa có dữ liệu';
+                    document.getElementById('mob-distractions').innerText = live.distractions + ' lần';
+                    document.getElementById('mob-seat-leaving').innerText = live.seat_leaving_count + ' lần (' + Math.round(live.seat_leaving_duration / 60) + ' phút)';
+                    return;
                 }
-            } catch (e) {
-                // Keep default values
-            }
+                const profile = await getJson('/api/student/profile');
+                if (profile) {
+                    document.getElementById('mob-score').innerText = profile.average_focus_score === null ? '—' : profile.average_focus_score;
+                    document.getElementById('mob-score-label').innerText = 'Điểm tập trung trung bình';
+                    document.getElementById('mob-status').innerText = profile.status === 'ok' ? `${profile.total_sessions} phiên đã hoàn thành` : 'Không đủ dữ liệu';
+                    const secs = profile.total_duration_seconds || 0;
+                    document.getElementById('mob-total-time').innerText = `${Math.floor(secs / 3600)}g ${Math.floor((secs % 3600) / 60)}p`;
+                }
+            } catch (e) { /* keep "—" */ }
+        }
+        async function fetchHistory() {
+            try {
+                const att = await getJson('/api/student/attendance_history');
+                if (Array.isArray(att) && att.length) {
+                    const attended = att.filter(a => !a.missed).length;
+                    document.getElementById('mob-attendance').innerText = `${attended}/${att.length} buổi`;
+                    const labels = { PRESENT: 'Có mặt', LATE: 'Đi muộn', ABSENT: 'Vắng mặt' };
+                    document.getElementById('mob-logs').innerHTML = att.slice(0, 8).map(a => `
+                        <div class="log-item ${a.missed ? 'danger' : 'info'}">
+                            <div class="log-header"><span class="log-title">${labels[a.attendance_status] || esc(a.attendance_status)}</span>
+                            <span class="log-time">${esc(a.started_at)}</span></div>
+                            <p class="log-desc">Điểm TB: ${a.focus_score === null ? 'N/A' : a.focus_score}</p>
+                        </div>`).join('');
+                }
+                const rec = await getJson('/api/student/recommendations');
+                if (rec && rec.text) document.getElementById('mob-coach').innerText = rec.text;
+            } catch (e) { /* keep defaults */ }
         }
         setInterval(fetchLiveStats, 3000);
         fetchLiveStats();
+        fetchHistory();
     </script>
 </body>
 </html>

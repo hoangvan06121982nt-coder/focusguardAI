@@ -132,7 +132,7 @@
                     <div class="col-md-3">
                         <div class="custom-card p-4 h-100 d-flex flex-column justify-content-between">
                             <div>
-                                <span class="text-muted small uppercase fw-semibold">Tổng thời gian học</span>
+                                <span class="text-muted small uppercase fw-semibold">Tổng thời gian học (tự học)</span>
                                 <h3 class="mt-2 mb-0 fw-bold">{{ (profile_stats.total_duration_seconds // 3600) | int }} giờ {{ ((profile_stats.total_duration_seconds % 3600) // 60) | int }} phút</h3>
                             </div>
                             <div class="mt-3 {% if profile_stats.trend == 'up' %}text-success{% elif profile_stats.trend == 'down' %}text-danger{% else %}text-muted{% endif %} small">
@@ -140,8 +140,10 @@
                                     <i class="fa-solid fa-arrow-trend-up"></i> Có xu hướng tăng
                                 {% elif profile_stats.trend == 'down' %}
                                     <i class="fa-solid fa-arrow-trend-down"></i> Có xu hướng giảm
-                                {% else %}
+                                {% elif profile_stats.trend == 'stable' %}
                                     <i class="fa-solid fa-arrows-left-right"></i> Duy trì ổn định
+                                {% else %}
+                                    <i class="fa-solid fa-circle-info"></i> Không đủ dữ liệu để đánh giá xu hướng
                                 {% endif %}
                             </div>
                         </div>
@@ -150,32 +152,44 @@
                         <div class="custom-card p-4 h-100 d-flex flex-column justify-content-between">
                             <div>
                                 <span class="text-muted small uppercase fw-semibold">Điểm tập trung TB</span>
+                                {% if profile_stats.average_focus_score is not none %}
                                 <h3 class="mt-2 mb-0 fw-bold text-primary">{{ profile_stats.average_focus_score }} / 100</h3>
+                                {% else %}
+                                <h3 class="mt-2 mb-0 fw-bold text-muted">N/A</h3>
+                                {% endif %}
                             </div>
-                            <div class="mt-3 text-primary small">
-                                <i class="fa-solid fa-circle-check"></i> Đạt mức xếp loại {% if profile_stats.average_focus_score >= 80 %}tốt{% elif profile_stats.average_focus_score >= 50 %}trung bình{% else %}cần chú ý{% endif %}
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="custom-card p-4 h-100 d-flex flex-column justify-content-between">
-                            <div>
-                                <span class="text-muted small uppercase fw-semibold">Tỷ lệ chuyên cần</span>
-                                <h3 class="mt-2 mb-0 fw-bold text-success">{{ 95 if profile_stats.total_sessions >= 5 else (80 if profile_stats.total_sessions > 0 else 0) }}%</h3>
-                            </div>
-                            <div class="mt-3 text-success small">
-                                <i class="fa-solid fa-user-check"></i> Trực tuyến đều đặn
+                            <div class="mt-3 text-muted small">
+                                <i class="fa-solid fa-circle-info"></i> {{ profile_stats.total_sessions }} phiên đã hoàn thành
                             </div>
                         </div>
                     </div>
                     <div class="col-md-3">
                         <div class="custom-card p-4 h-100 d-flex flex-column justify-content-between">
                             <div>
-                                <span class="text-muted small uppercase fw-semibold">Số lần rời vị trí</span>
-                                <h3 class="mt-2 mb-0 fw-bold text-warning">{{ stats.seat_leaving_count if stats else 2 }} lần</h3>
+                                <span class="text-muted small uppercase fw-semibold">Chuyên cần (buổi học lớp)</span>
+                                {% if attendance_summary %}
+                                <h3 class="mt-2 mb-0 fw-bold text-success">{{ attendance_summary.rate }}%</h3>
+                                {% else %}
+                                <h3 class="mt-2 mb-0 fw-bold text-muted">N/A</h3>
+                                {% endif %}
                             </div>
-                            <div class="mt-3 text-warning small">
-                                <i class="fa-solid fa-circle-exclamation"></i> Tổng: {{ stats.seat_leaving_duration // 60 if stats else 8 }} phút vắng mặt
+                            <div class="mt-3 text-muted small">
+                                {% if attendance_summary %}
+                                <i class="fa-solid fa-user-check"></i> Có mặt {{ attendance_summary.attended }}/{{ attendance_summary.total }} buổi
+                                {% else %}
+                                <i class="fa-solid fa-circle-info"></i> Không đủ dữ liệu
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="custom-card p-4 h-100 d-flex flex-column justify-content-between">
+                            <div>
+                                <span class="text-muted small uppercase fw-semibold">Số lần rời chỗ (buổi học lớp)</span>
+                                <h3 class="mt-2 mb-0 fw-bold text-warning">{% if attendance_summary %}{{ attendance_summary.away_count }} lần{% else %}N/A{% endif %}</h3>
+                            </div>
+                            <div class="mt-3 text-muted small">
+                                <i class="fa-solid fa-circle-info"></i> Chỉ tính các lần vắng khỏi khung hình kéo dài
                             </div>
                         </div>
                     </div>
@@ -185,33 +199,44 @@
                     <!-- Recommendation box -->
                     <div class="col-lg-8">
                         <div class="custom-card p-4 h-100 border border-primary border-opacity-25" style="background: linear-gradient(135deg, rgba(59, 130, 246, 0.03) 0%, transparent 100%);">
-                            <h5 class="fw-bold text-primary mb-3"><i class="fa-solid fa-brain me-2"></i> Công cụ Đề xuất học tập thông minh (AI Engine)</h5>
+                            <h5 class="fw-bold text-primary mb-3"><i class="fa-solid fa-lightbulb me-2"></i> Gợi ý khung giờ học (thống kê, không phải dự đoán AI)</h5>
                             <div class="p-3 bg-primary bg-opacity-10 rounded-3 mb-3 border-start border-primary border-4">
                                 <p class="mb-0 fw-medium text-primary-emphasis" style="font-size: 0.95rem; line-height: 1.6;">
-                                    {{ recommendations.text }}
+                                    {{ recommendations.text if recommendations else 'Không đủ dữ liệu' }}
                                 </p>
                             </div>
                             <div class="row g-3">
-                                <div class="col-sm-6">
+                                <div class="col-sm-12">
                                     <div class="p-3 bg-card border rounded-3 text-center">
-                                        <small class="text-muted">Khung giờ hiệu quả nhất</small>
-                                        <h5 class="fw-bold text-success mt-1 mb-0"><i class="fa-regular fa-clock me-2"></i>{{ recommendations.best_time_range }}</h5>
-                                    </div>
-                                </div>
-                                <div class="col-sm-6">
-                                    <div class="p-3 bg-card border rounded-3 text-center">
-                                        <small class="text-muted">Đề xuất nghỉ ngơi</small>
-                                        <h5 class="fw-bold text-info mt-1 mb-0"><i class="fa-solid fa-circle-pause me-2"></i>Sau {{ recommendations.recommended_break_minutes }} phút (nghỉ 5p)</h5>
+                                        <small class="text-muted">Khung giờ có điểm trung bình cao nhất</small>
+                                        <h5 class="fw-bold text-success mt-1 mb-0"><i class="fa-regular fa-clock me-2"></i>{{ recommendations.best_time_range if recommendations and recommendations.best_time_range else 'N/A' }}</h5>
                                     </div>
                                 </div>
                             </div>
+                            {% if attendance %}
+                            <h6 class="fw-bold mt-4 mb-2">Buổi học gần đây</h6>
+                            <div class="table-responsive">
+                                <table class="table table-sm mb-0">
+                                    <thead><tr><th>Bắt đầu</th><th>Điểm danh</th><th>Điểm TB</th></tr></thead>
+                                    <tbody>
+                                    {% for a in attendance %}
+                                        <tr>
+                                            <td>{{ a.started_at }}</td>
+                                            <td>{% if a.attendance_status == 'PRESENT' %}Có mặt{% elif a.attendance_status == 'LATE' %}Đi muộn{% else %}<span class="text-danger">Vắng mặt</span>{% endif %}</td>
+                                            <td>{{ a.focus_score if a.focus_score is not none else 'N/A' }}</td>
+                                        </tr>
+                                    {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {% endif %}
                         </div>
                     </div>
 
                     <!-- Focus Heatmap -->
                     <div class="col-lg-4">
                         <div class="custom-card p-4 h-100">
-                            <h5 class="fw-bold mb-3"><i class="fa-solid fa-fire text-danger me-2"></i> Biểu đồ nhiệt tập trung (Hôm nay)</h5>
+                            <h5 class="fw-bold mb-3"><i class="fa-solid fa-fire text-danger me-2"></i> Điểm tập trung theo khung giờ bắt đầu phiên</h5>
                             <p class="text-muted small">Thời gian và mức độ tập trung từng khung giờ của con</p>
                             
                             <div class="heatmap-grid mt-4">
@@ -299,11 +324,11 @@
 
         // Initialize Chart with dynamic comparison history
         const comparisonLabels = [{% for c in comparison %}'{{ c.start_time[:10] }}',{% endfor %}];
-        const comparisonData = [{% for c in comparison %}{{ c.score }},{% endfor %}];
+        const comparisonData = [{% for c in comparison %}{{ c.score if c.score is not none else 'null' }},{% endfor %}];
         
         if (comparisonLabels.length === 0) {
-            comparisonLabels.push('Chưa có dữ liệu');
-            comparisonData.push(100);
+            comparisonLabels.push('Không đủ dữ liệu');
+            comparisonData.push(null);
         }
 
         const ctx = document.getElementById('parentProgressChart').getContext('2d');

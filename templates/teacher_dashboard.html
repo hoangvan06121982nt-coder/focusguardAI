@@ -398,9 +398,9 @@
                 <div class="d-flex align-items-center gap-2">
                     <h5 class="mb-0 fw-bold text-primary me-2">Giám sát Lớp:</h5>
                     <select class="form-select form-select-sm bg-dark text-white border-secondary me-3" id="select-class-monitor" style="width: 100px;">
-                        <option value="1" {% if session.get('class_id') == 1 %}selected{% endif %}>10A1</option>
-                        <option value="2" {% if session.get('class_id') == 2 %}selected{% endif %}>10A2</option>
-                        <option value="3" {% if session.get('class_id') == 3 %}selected{% endif %}>10A3</option>
+                        {% for c in teacher_classes %}
+                        <option value="{{ c.id }}" {% if c.id == current_class_id %}selected{% endif %}>{{ c.class_name }}</option>
+                        {% endfor %}
                     </select>
                     <span class="badge bg-success-subtle text-success border border-success px-2 py-1" style="font-size: 0.8rem;">
                         <i class="fa-solid fa-users me-1"></i>
@@ -498,7 +498,7 @@
                             <div class="col-md-3 col-sm-6">
                                 <div class="custom-card p-3 d-flex align-items-center justify-content-between border-start border-danger border-4" style="background: rgba(239, 68, 68, 0.05);">
                                     <div>
-                                        <span class="text-muted small d-block">Học sinh Gặp rủi ro</span>
+                                        <span class="text-muted small d-block">Đang có hành vi kéo dài</span>
                                         <h3 class="fw-bold mb-0 text-danger" id="class-risk-count">0</h3>
                                     </div>
                                     <div class="icon-circle bg-danger bg-opacity-10 text-danger" style="width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
@@ -515,7 +515,7 @@
                                     <i class="fa-solid fa-triangle-exclamation fs-4"></i>
                                     <div>
                                         <strong class="d-block" id="intervention-title">Lớp học đang giảm tập trung!</strong>
-                                        <span class="small" id="intervention-text">AI Đề xuất: ✓ Cho lớp nghỉ giải lao 5 phút, ✓ Đặt câu hỏi tương tác</span>
+                                        <span class="small" id="intervention-text"></span>
                                     </div>
                                 </div>
                                 <button class="btn btn-warning btn-sm" onclick="document.getElementById('banner-ai-intervention').style.display='none'">Đóng</button>
@@ -638,9 +638,9 @@
                             </div>
 
                             <div class="text-center pb-3 border-bottom mb-3">
-                                <h5 class="fw-bold mb-1" id="detail-name">Nguyễn Văn An</h5>
+                                <h5 class="fw-bold mb-1" id="detail-name">—</h5>
                                 <span class="badge" id="detail-badge">Tập trung</span>
-                                <div class="text-muted mt-1" style="font-size: 0.8rem;">Mã HS: <span id="detail-roll">07</span></div>
+                                <div class="text-muted mt-1" style="font-size: 0.8rem;">Mã HS: <span id="detail-roll">—</span></div>
                             </div>
                             
                             <!-- Detailed Metrics -->
@@ -648,13 +648,13 @@
                                 <div class="col-6">
                                     <div class="metric-card-mini">
                                         <h6>Điểm tập trung</h6>
-                                        <span class="text-success" id="detail-focus-score">92%</span>
+                                        <span class="text-success" id="detail-focus-score">—</span>
                                     </div>
                                 </div>
                                 <div class="col-6">
                                     <div class="metric-card-mini">
                                         <h6>Vi phạm</h6>
-                                        <span class="text-danger" id="detail-distractions">2</span>
+                                        <span class="text-danger" id="detail-distractions">0</span>
                                     </div>
                                 </div>
                                 <div class="col-6">
@@ -671,59 +671,25 @@
                                 </div>
                             </div>
 
-                            <!-- Emotion Section -->
+                            <!-- Runtime status (separate dimensions, never merged) -->
                             <div class="custom-card p-3 mb-3" style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05);">
-                                <div class="d-flex align-items-center mb-2">
-                                    <h6 class="fw-semibold text-secondary mb-0" style="font-size: 0.8rem;"><i class="fa-solid fa-face-smile text-success me-1"></i>Phân tích cảm xúc học sinh</h6>
-                                </div>
-                                <div class="d-flex align-items-center gap-3 mb-2">
-                                    <span class="fs-2" id="detail-emotion-icon">😐</span>
-                                    <div>
-                                        <div class="fw-bold text-white mb-0" id="detail-emotion" style="font-size: 0.95rem;">Bình thường</div>
-                                        <div class="text-white-50" style="font-size: 0.75rem;">
-                                            Độ tin cậy: <strong class="text-success" id="detail-emotion-confidence">87%</strong>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="border-top pt-2 mt-2">
-                                    <div class="text-muted mb-1" style="font-size: 0.7rem;">Dòng thời gian cảm xúc (Lịch sử):</div>
-                                    <div class="d-flex align-items-center gap-1 w-100 flex-wrap" id="detail-emotion-timeline" style="min-height: 20px;">
-                                        <!-- Colored capsules -->
-                                    </div>
+                                <h6 class="fw-semibold text-secondary mb-2" style="font-size: 0.8rem;"><i class="fa-solid fa-id-card text-info me-1"></i>Trạng thái thời gian thực</h6>
+                                <div style="font-size: 0.8rem;">
+                                    <div class="d-flex justify-content-between"><span class="text-muted">Điểm danh</span><strong id="detail-attendance-status">—</strong></div>
+                                    <div class="d-flex justify-content-between"><span class="text-muted">Khung hình</span><strong id="detail-visibility-status">—</strong></div>
+                                    <div class="d-flex justify-content-between"><span class="text-muted">Kết nối</span><strong id="detail-connection-status">—</strong></div>
+                                    <div class="d-flex justify-content-between"><span class="text-muted">Nhận diện</span><strong id="detail-identity-status">—</strong></div>
                                 </div>
                             </div>
 
-                            <!-- AI Learning Risk Analysis -->
+                            <!-- Behaviour events (real) -->
                             <div class="custom-card p-3 mb-3" style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05);">
-                                <div class="d-flex align-items-center justify-content-between mb-2">
-                                    <h6 class="fw-semibold text-secondary mb-0" style="font-size: 0.8rem;">
-                                        <i class="fa-solid fa-triangle-exclamation text-warning me-1"></i>Phân tích rủi ro học tập AI
-                                    </h6>
-                                    <span class="badge bg-success" id="detail-risk-level">Thấp</span>
-                                </div>
-                                <div class="d-flex align-items-center gap-3">
-                                    <div class="d-flex align-items-baseline">
-                                        <span class="fs-3 fw-bold text-white" id="detail-risk-score">0</span>
-                                        <span class="text-muted" style="font-size: 0.8rem;">/100</span>
-                                    </div>
-                                    <button class="btn btn-link p-0 text-muted ms-auto" data-bs-toggle="tooltip" data-bs-placement="top" id="risk-formula-tooltip" title="Điểm rủi ro = 40% Sử dụng điện thoại + 30% Ngủ gật + 20% Ngoảnh mặt đi + 10% Cảm xúc tiêu cực">
-                                        <i class="fa-regular fa-circle-question fs-6"></i>
-                                    </button>
-                                </div>
-                            </div>
-
-                            <!-- AI Summary & Recommendations -->
-                            <div class="custom-card p-3 mb-3" style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05);">
-                                <h6 class="fw-semibold text-secondary mb-2" style="font-size: 0.8rem;">
-                                    <i class="fa-solid fa-brain text-info me-1"></i>Đánh giá & Đề xuất AI
-                                </h6>
-                                <p class="text-white-50 mb-0" id="detail-ai-summary" style="font-size: 0.8rem; line-height: 1.45;">
-                                    Đang phân tích dữ liệu học tập của học sinh...
-                                </p>
+                                <h6 class="fw-semibold text-secondary mb-2" style="font-size: 0.8rem;"><i class="fa-solid fa-list-check text-warning me-1"></i>Sự kiện hành vi trong buổi</h6>
+                                <p class="text-white-50 mb-0" id="detail-ai-summary" style="font-size: 0.8rem; line-height: 1.45;">Chưa có dữ liệu.</p>
                             </div>
 
                             <!-- mini chart -->
-                            <h6 class="fw-semibold text-secondary mb-2" style="font-size: 0.8rem;">Lịch sử tập trung (10 cập nhật gần nhất)</h6>
+                            <h6 class="fw-semibold text-secondary mb-2" style="font-size: 0.8rem;">Điểm tập trung (các lần cập nhật gần nhất)</h6>
                             <div style="height: 120px;" class="mb-3">
                                 <canvas id="mini-student-chart"></canvas>
                             </div>
@@ -795,7 +761,7 @@
                         <div class="row g-4">
                             <div class="col-md-6 col-sm-12">
                                 <div class="custom-card p-3 h-100 border-start border-info border-4" style="background: rgba(13, 202, 240, 0.05); min-height: 200px;">
-                                    <h6 class="fw-bold text-info mb-3"><i class="fa-solid fa-brain me-2"></i>Phân tích Lớp học AI</h6>
+                                    <h6 class="fw-bold text-info mb-3"><i class="fa-solid fa-list me-2"></i>Tình hình lớp (số liệu đo được)</h6>
                                     <div id="offline-ai-analysis-container" class="small">
                                         <!-- Will be populated dynamically -->
                                         <p class="text-muted mb-0">Chờ dữ liệu phân tích lớp học...</p>
@@ -807,7 +773,7 @@
                                     <h6 class="fw-bold text-warning mb-3"><i class="fa-solid fa-lightbulb me-2"></i>Gợi ý cho Giáo viên</h6>
                                     <div id="offline-suggestions-container" class="small">
                                         <!-- Will be populated dynamically -->
-                                        <p class="text-muted mb-0">Chờ gợi ý giảng dạy từ AI...</p>
+                                        <p class="text-muted mb-0">Không có gợi ý tự động.</p>
                                     </div>
                                 </div>
                             </div>
@@ -830,7 +796,7 @@
                                 <div class="col-6">
                                     <div class="metric-card-mini p-2">
                                         <h6 class="small text-muted mb-1" style="font-size:0.7rem;">Sĩ số hiện diện</h6>
-                                        <span class="text-success fw-bold fs-5" id="offline-stat-present">28</span>
+                                        <span class="text-success fw-bold fs-5" id="offline-stat-present">—</span>
                                     </div>
                                 </div>
                                 <div class="col-6">
@@ -857,7 +823,7 @@
                         <!-- Classroom AI Twin Card -->
                         <div class="custom-card p-3 mb-4">
                             <div class="d-flex justify-content-between align-items-center mb-3">
-                                <h6 class="fw-bold text-primary mb-0"><i class="fa-solid fa-sitemap me-2"></i>Bản đồ AI Lớp học (AI Twin)</h6>
+                                <h6 class="fw-bold text-primary mb-0"><i class="fa-solid fa-sitemap me-2"></i>Sơ đồ chỗ ngồi (theo vị trí trong khung hình)</h6>
                                 <span class="badge bg-secondary" style="font-size: 0.65rem;">Ghế 4x7</span>
                             </div>
                             <div class="text-center mb-3 py-1 bg-dark bg-opacity-25 text-muted rounded small" style="font-size: 0.7rem;">BẢNG ĐEN / GIÁO VIÊN VẬT LÝ</div>
@@ -933,13 +899,13 @@
                             <div class="col-md-3">
                                 <div class="custom-card p-3 text-center">
                                     <h6 class="text-secondary small mb-1">Điểm tập trung TB lớp</h6>
-                                    <h3 class="fw-bold text-success mb-0" id="analytics-avg-score">85%</h3>
+                                    <h3 class="fw-bold text-success mb-0" id="analytics-avg-score">—</h3>
                                 </div>
                             </div>
                             <div class="col-md-3">
                                 <div class="custom-card p-3 text-center">
                                     <h6 class="text-secondary small mb-1">Học sinh tập trung nhất</h6>
-                                    <h3 class="fw-bold text-primary mb-0" id="analytics-best-student">Trần Thị Bình</h3>
+                                    <h3 class="fw-bold text-primary mb-0" id="analytics-best-student">—</h3>
                                 </div>
                             </div>
                             <div class="col-md-3">
@@ -1129,7 +1095,7 @@
                     
                     <div class="col-md-6 col-sm-12">
                         <div class="custom-card p-4">
-                            <h5 class="fw-bold text-primary mb-4"><i class="fa-solid fa-shield-halved me-2"></i>Cấu hình AI & Âm thanh</h5>
+                            <h5 class="fw-bold text-primary mb-4"><i class="fa-solid fa-shield-halved me-2"></i>Cấu hình cảnh báo & Âm thanh</h5>
                             
                             <div class="form-check form-switch mb-3">
                                 <input class="form-check-input" type="checkbox" id="teacher-setting-sound" checked>
@@ -1152,7 +1118,7 @@
                 <div id="section-teacher-attendance" class="row g-4 {% if active_tab != 'attendance' %}d-none{% endif %}">
                     <div class="col-12">
                         <div class="custom-card p-4">
-                            <h5 class="fw-bold text-primary mb-4"><i class="fa-solid fa-clipboard-user me-2"></i>Điểm danh thông minh bằng AI</h5>
+                            <h5 class="fw-bold text-primary mb-4"><i class="fa-solid fa-clipboard-user me-2"></i>Điểm danh (nhận diện khuôn mặt có xác nhận theo thời gian)</h5>
                             <div class="table-responsive">
                                 <table class="table table-hover align-middle">
                                     <thead>
@@ -1178,13 +1144,13 @@
 
     <!-- Floating AI Voice Assistant Widget -->
     <div class="position-fixed" style="bottom: 30px; right: 30px; z-index: 1040;">
-        <button class="btn btn-primary rounded-circle shadow-lg d-flex align-items-center justify-content-center" id="btn-voice-assistant" style="width: 56px; height: 56px; transition: transform 0.2s;" title="Trợ lý ảo giọng nói AI">
+        <button class="btn btn-primary rounded-circle shadow-lg d-flex align-items-center justify-content-center" id="btn-voice-assistant" style="width: 56px; height: 56px; transition: transform 0.2s;" title="Trợ lý giọng nói (đọc số liệu lớp)">
             <i class="fa-solid fa-microphone fs-4"></i>
         </button>
         <!-- Dialogue popover -->
         <div class="card p-3 shadow bg-glass text-white d-none" id="voice-assistant-card" style="position: absolute; bottom: 70px; right: 0; width: 280px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.1);">
             <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom border-secondary">
-                <small class="fw-bold text-primary"><i class="fa-solid fa-robot me-1"></i> Trợ lý ảo AI</small>
+                <small class="fw-bold text-primary"><i class="fa-solid fa-robot me-1"></i> Trợ lý giọng nói</small>
                 <button type="button" class="btn-close btn-close-white" style="font-size: 0.7rem;" onclick="document.getElementById('voice-assistant-card').classList.add('d-none')"></button>
             </div>
             <p class="mb-2 small" id="voice-prompt-text" style="color: #cbd5e1;">Bấm mic và hỏi "Lớp hôm nay thế nào?"</p>
@@ -1197,7 +1163,7 @@
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content border-0 bg-dark text-white" style="border-radius: 20px; box-shadow: 0 15px 40px rgba(0,0,0,0.5);">
                 <div class="modal-header border-bottom border-secondary">
-                    <h5 class="modal-title fw-bold text-primary"><i class="fa-solid fa-brain me-2"></i>Tóm tắt lớp học thông minh AI</h5>
+                    <h5 class="modal-title fw-bold text-primary"><i class="fa-solid fa-clipboard-list me-2"></i>Tóm tắt buổi học</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body text-center p-4">
@@ -1237,7 +1203,7 @@
     <script>
         // Store session variables for dashboard routing logic
         window.userRole = "{{ session.get('role') }}";
-        window.userClassId = "{{ session.get('class_id') }}";
+        window.userClassId = "{{ current_class_id or '' }}";
         window.ACTIVE_TAB = "{{ active_tab }}";
         window.DISPLAY_NAME = "{{ session.get('display_name', '') }}";
     </script>
