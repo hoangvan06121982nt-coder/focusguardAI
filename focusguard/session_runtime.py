@@ -76,6 +76,7 @@ class SessionRuntime:
         self.analyzers: Dict[int, BehaviorAnalyzer] = {}
         self._last_snapshot_at: Dict[int, float] = {}
         self._history: Dict[int, deque] = {}           # live chart, 1 sample/s, in memory only
+        self._last_obs_at: Dict[int, float] = {}       # per-student camera freshness (online/personal)
         self.episodes: List[BehaviorEpisode] = []   # closed episodes, for summaries/evaluation
         self.logs: List[dict] = []
         self.lock = threading.RLock()
@@ -134,20 +135,37 @@ class SessionRuntime:
             if not self.active or sid not in self.states:
                 return []
             self.last_frame_at = obs.timestamp
+            self._last_obs_at[sid] = obs.timestamp
             self.camera_status = "ACTIVE"
             return self._apply(self.states[sid], self.analyzers[sid], obs, obs.timestamp)
 
+    def _mark_no_signal(self, st: rs.StudentRuntimeState, last_real: float):
+        # Close the scoring interval at the last real observation, then freeze.
+        self.engine.advance(st, st.focus_state, last_real)
+        if st.visibility_status not in (rs.VIS_NOT_SEEN, rs.VIS_NO_SIGNAL):
+            st.visibility_status = rs.VIS_NO_SIGNAL
+            st.focus_state = rs.FOCUS_UNKNOWN
+
     def heartbeat(self, now: float) -> str:
         with self.lock:
-            if self.last_frame_at is not None and now - self.last_frame_at > self.camera_stale_seconds:
-                if self.camera_status != "NO_SIGNAL":
-                    self.camera_status = "NO_SIGNAL"
-                    for st in self.states.values():
-                        # Close the scoring interval at the last real frame.
-                        self.engine.advance(st, st.focus_state, self.last_frame_at)
-                        if st.visibility_status != rs.VIS_NOT_SEEN:
-                            st.visibility_status = rs.VIS_NO_SIGNAL
-                            st.focus_state = rs.FOCUS_UNKNOWN
+            if self.mode == MODE_CLASSROOM:
+                # One shared camera: staleness is global.
+                if self.last_frame_at is not None and now - self.last_frame_at > self.camera_stale_seconds:
+                    if self.camera_status != "NO_SIGNAL":
+                        self.camera_status = "NO_SIGNAL"
+                        for st in self.states.values():
+                            self._mark_no_signal(st, self.last_frame_at)
+                return self.camera_status
+            # Online / personal: every student has their own camera, so a
+            # stalled camera only affects that student.
+            fresh = False
+            for sid, last in self._last_obs_at.items():
+                if now - last > self.camera_stale_seconds:
+                    self._mark_no_signal(self.states[sid], last)
+                else:
+                    fresh = True
+            if self._last_obs_at:
+                self.camera_status = "ACTIVE" if fresh else "NO_SIGNAL"
             return self.camera_status
 
     def _apply(self, st: rs.StudentRuntimeState, analyzer: BehaviorAnalyzer,
@@ -315,7 +333,8 @@ class SessionRuntime:
             end_at = self.last_frame_at if (self.camera_status == "NO_SIGNAL" and self.last_frame_at) else now
             summaries = []
             for sid, st in self.states.items():
-                self.engine.advance(st, st.focus_state, end_at)
+                self.engine.advance(st, st.focus_state, end_at if st.visibility_status != rs.VIS_NO_SIGNAL
+                                    else (st.last_update_at or end_at))
                 for ep in self.analyzers[sid].close(end_at):
                     self._close_episode(st, ep)
                 if st.focus_score is not None:

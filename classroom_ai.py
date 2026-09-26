@@ -40,9 +40,11 @@ LANDMARK_MAX_AGE = 0.6       # cached EAR/pose older than this is "not measured"
 class ClassroomAI:
     mode = "classroom"
 
-    def __init__(self, session_manager, class_id, camera_index=0):
+    def __init__(self, session_manager, class_id, camera_index=0, class_session_id=None):
         self.session_manager = session_manager
         self.class_id = int(class_id)
+        # The pipeline only ever feeds the classroom session it was started for.
+        self.class_session_id = class_session_id
         self.camera_index = camera_index
         self.config = session_manager.config
         self.tracker = PersonTracker()
@@ -99,7 +101,7 @@ class ClassroomAI:
         return value[1:]
 
     def get_frame(self):
-        runtime = self.session_manager.class_runtime(self.class_id)
+        runtime = self.session_manager.classroom_runtime(self.class_id, self.class_session_id)
         if not self.cap.isOpened():
             self.cap.open(self.camera_index)
         ok, frame = self.cap.read()
@@ -116,10 +118,7 @@ class ClassroomAI:
         persons = {p["track_id"]: tuple(p["bbox"]) for p in tracked}
         seats = self.seating_manager.assign_seats(tracked, w, h)
 
-        phones = []
-        for r in self.tracker.model(frame, classes=[67], verbose=False):
-            for box in r.boxes:
-                phones.append((tuple(map(float, box.xyxy[0].tolist())), float(box.conf[0])))
+        phones = self.tracker.detect_phones(frame)   # separate detector: never touches ByteTrack state
         beh = self.config.behavior
         phone_by_track = associate_phones(persons, phones, beh.phone_min_confidence, beh.phone_min_containment)
 

@@ -72,7 +72,21 @@ class SessionManager:
                 mode=mode, config=self.config, sink=self.sink, notifier=self._notify_for(class_id),
                 source="classroom_camera" if mode == MODE_CLASSROOM else "student_camera",
             )
-            return self.registry.start_class(class_id, runtime, now)
+            self.registry.start_class(class_id, runtime, now)
+            if mode == MODE_ONLINE:
+                self._link_running_personal_sessions(runtime, now)
+            return runtime
+
+    def _link_running_personal_sessions(self, runtime: SessionRuntime, now: float):
+        """Students already studying alone join the online class: their personal
+        runtime is closed (its episodes persist under the personal session) and
+        from now on the class runtime is the ONE runtime scoring them."""
+        for sid, info in self._personal_sessions.items():
+            if info.get("linked_class") is not None or sid not in runtime.states:
+                continue
+            self.registry.end_personal(sid, now)
+            info["linked_class"] = runtime.class_id
+            runtime.set_connection(sid, True)
 
     def end_class(self, class_id: int):
         with self._lock:
@@ -90,6 +104,16 @@ class SessionManager:
 
     def class_runtime(self, class_id) -> Optional[SessionRuntime]:
         return self.registry.class_runtime(class_id)
+
+    def classroom_runtime(self, class_id, class_session_id=None) -> Optional[SessionRuntime]:
+        """Runtime a classroom camera may feed: classroom mode only and, when
+        given, the exact class session the camera was started for."""
+        rt = self.registry.class_runtime(class_id)
+        if rt is None or rt.mode != MODE_CLASSROOM:
+            return None
+        if class_session_id is not None and rt.class_session_id != class_session_id:
+            return None
+        return rt
 
     def class_live_view(self, class_id) -> dict:
         rt = self.registry.class_runtime(class_id)
@@ -133,7 +157,8 @@ class SessionManager:
                 rt = SessionRuntime(
                     enrolled=[{"student_id": student_id, "display_name": user.get("display_name"),
                                "class_id": class_id}],
-                    started_at=now, session_id=session_id, class_id=class_id, mode=MODE_PERSONAL,
+                    # class_id=None: self-study rows must never count as class data
+                    started_at=now, session_id=session_id, class_id=None, mode=MODE_PERSONAL,
                     config=self.config, sink=self.sink, source="personal_camera")
                 rt.set_connection(student_id, True)
                 self.registry.start_personal(student_id, rt, now)
@@ -235,14 +260,18 @@ class SessionManager:
     def _class_names(self, class_id):
         return {s["student_id"]: s["display_name"] for s in self.repo.get_students_in_class(class_id)}
 
+    def _class_rows(self, fetch, class_id):
+        # Only rows produced by a class session (legacy personal rows may carry a class_id).
+        return [r for r in fetch(class_id=class_id) if r.get("class_session_id") is not None]
+
     def class_analytics(self, class_id):
-        rows = self.repo.get_session_students(class_id=class_id)
-        events = self.repo.get_focus_events(class_id=class_id)
+        rows = self._class_rows(self.repo.get_session_students, class_id)
+        events = self._class_rows(self.repo.get_focus_events, class_id)
         measured = sum(1 for r in rows if analytics.session_score(r) is not None)
         names = self._class_names(class_id)
         return {
             "breakdown": analytics.event_breakdown(events, measured),
-            "danger_hour": analytics.danger_hour(self.repo.get_focus_snapshots(class_id=class_id)),
+            "danger_hour": analytics.danger_hour(self._class_rows(self.repo.get_focus_snapshots, class_id)),
             "watchlist": analytics.watchlist(rows, names),
             "class_sessions": len([c for c in self.repo.get_class_sessions(class_id) if c.get("ended_at")]),
         }
@@ -251,7 +280,8 @@ class SessionManager:
         today = datetime.now().strftime("%Y-%m-%d")
         cs_today = {c["id"] for c in self.repo.get_class_sessions(class_id)
                     if str(c.get("started_at") or "").startswith(today)}
-        rows = [r for r in self.repo.get_session_students(class_id=class_id) if r.get("class_session_id") in cs_today]
+        rows = [r for r in self._class_rows(self.repo.get_session_students, class_id)
+                if r.get("class_session_id") in cs_today]
         return analytics.leaderboard(rows, self._class_names(class_id))
 
     def class_session_summary(self, class_session_id, class_id):

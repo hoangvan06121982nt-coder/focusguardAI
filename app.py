@@ -31,35 +31,73 @@ MSG_FORBIDDEN = "Không có quyền truy cập"
 class CameraHub:
     """At most one physical camera pipeline per process.
 
-    A browser disconnecting from /video_feed releases the camera device only;
-    the authoritative SessionRuntime keeps running (it reports
-    NO_CAMERA_SIGNAL until frames resume).
+    * viewers of the same pipeline key share it (reference counted); closing
+      one browser tab does not stop the stream for the others;
+    * acquiring a different key closes the old pipeline and bumps the
+      generation, so generators still holding the old pipeline stop instead
+      of re-opening the device;
+    * ``read`` serialises ``get_frame`` (tracker and IdentityManager are not
+      thread-safe).
+
+    A browser disconnecting only releases the camera device; the
+    authoritative SessionRuntime keeps running (it reports NO_CAMERA_SIGNAL
+    until frames resume).
     """
 
     def __init__(self):
         self.lock = threading.RLock()
+        self.frame_lock = threading.Lock()
         self.pipeline = None
         self.key = None
+        self.users = 0
+        self.generation = 0
 
     def acquire(self, key, factory):
         with self.lock:
             if self.pipeline is not None and self.key != key:
-                self.release()
+                self._close()
             if self.pipeline is None:
                 self.pipeline = factory()
                 self.key = key
-            return self.pipeline
+                self.users = 0
+                self.generation += 1
+            self.users += 1
+            return self.pipeline, self.generation
 
-    def release(self, key=None):
+    def is_current(self, generation):
+        return self.pipeline is not None and self.generation == generation
+
+    def read(self, generation):
+        with self.frame_lock:
+            pipeline = self.pipeline
+            if pipeline is None or self.generation != generation:
+                return None
+            return pipeline.get_frame()
+
+    def release(self, generation):
+        """A viewer of ``generation`` left."""
         with self.lock:
-            if self.pipeline is None or (key is not None and key != self.key):
+            if self.pipeline is None or generation != self.generation:
                 return
-            try:
-                self.pipeline.release()
-            except Exception as exc:
-                print("[CAMERA] release error:", exc)
-            self.pipeline = None
-            self.key = None
+            self.users -= 1
+            if self.users <= 0:
+                self._close()
+
+    def force_release(self, predicate=None):
+        """Close the pipeline now (e.g. class ended) if its key matches."""
+        with self.lock:
+            if self.pipeline is not None and (predicate is None or predicate(self.key)):
+                self._close()
+
+    def _close(self):
+        try:
+            self.pipeline.release()
+        except Exception as exc:
+            print("[CAMERA] release error:", exc)
+        self.pipeline = None
+        self.key = None
+        self.users = 0
+        self.generation += 1
 
 
 def create_app(repo=None, env=None, async_mode=None, start_background=True, session_manager=None):
@@ -267,18 +305,20 @@ def create_app(repo=None, env=None, async_mode=None, start_background=True, sess
     # ----------------------------------------------------------- video stream
     def stream(pipeline_key, factory, keep_running):
         def gen():
+            generation = None
             try:
-                cam = cameras.acquire(pipeline_key, factory)
-                while keep_running():
+                _, generation = cameras.acquire(pipeline_key, factory)
+                while keep_running() and cameras.is_current(generation):
                     socketio.sleep(0.05)
-                    frame, _, _ = cam.get_frame()
-                    if frame is None:
+                    out = cameras.read(generation)
+                    if out is None or out[0] is None:
                         continue
-                    yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + frame + b"\r\n"
+                    yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + out[0] + b"\r\n"
             except GeneratorExit:
                 pass
             finally:
-                cameras.release(pipeline_key)
+                if generation is not None:
+                    cameras.release(generation)
         return Response(gen(), mimetype="multipart/x-mixed-replace; boundary=frame")
 
     @app.route("/video_feed")
@@ -290,14 +330,18 @@ def create_app(repo=None, env=None, async_mode=None, start_background=True, sess
             cid = int_arg("class_id") or teacher_class_id(p)
             if not authz.can_view_video_feed(p, "classroom", cid):
                 return api_error()
-            rt = sm.class_runtime(cid)
-            if rt is None or rt.mode != "classroom":
+            rt = sm.classroom_runtime(cid)
+            if rt is None:
                 return api_error("Lớp học chưa bắt đầu giám sát bằng camera.", 409)
+            cs_id = rt.class_session_id
 
             def factory():
                 from classroom_ai import ClassroomAI
-                return ClassroomAI(sm, cid)
-            return stream(("classroom", cid), factory, lambda: sm.class_runtime(cid) is not None)
+                return ClassroomAI(sm, cid, class_session_id=cs_id)
+            # Bound to this exact classroom session: stops if the class ends or
+            # another (e.g. online) session replaces it.
+            return stream(("classroom", cid, cs_id), factory,
+                          lambda: sm.classroom_runtime(cid, cs_id) is not None)
 
         if not authz.can_view_video_feed(p, "personal"):
             return api_error()
@@ -353,7 +397,7 @@ def create_app(repo=None, env=None, async_mode=None, start_background=True, sess
     @api_auth(authz.ROLE_STUDENT)
     def stop_session(p):
         result = sm.stop_personal_session(p.user_id)
-        cameras.release(("personal", p.user_id))
+        cameras.force_release(lambda key: key == ("personal", p.user_id))
         return jsonify({"status": "success", "result": result})
 
     # ------------------------------------------------ personal analytics (own)
@@ -483,8 +527,7 @@ def create_app(repo=None, env=None, async_mode=None, start_background=True, sess
         rt = sm.class_runtime(cid)
         if rt is None:
             return jsonify({"status": "success", "message": "Không có lớp học đang diễn ra."})
-        if mode == "classroom":
-            cameras.release(("classroom", cid))
+        cameras.force_release(lambda key: key[:2] == ("classroom", cid))
         result = sm.end_class(cid)
         socketio.emit("class_ended", {"message": "Giáo viên đã kết thúc lớp học", "class_id": cid},
                       room=realtime.class_students_room(cid))
@@ -752,11 +795,12 @@ def create_app(repo=None, env=None, async_mode=None, start_background=True, sess
     @app.route("/api/admin/reset_face", methods=["POST"])
     @api_auth(authz.ROLE_ADMIN)
     def admin_reset_face(p):
-        user_id = (request.get_json(silent=True) or {}).get("user_id")
-        if user_id is None:
+        try:
+            user_id = int((request.get_json(silent=True) or {}).get("user_id"))
+        except (TypeError, ValueError):
             return api_error("Thiếu thông tin user_id", 400)
         repo.save_face_embedding(user_id, None)
-        legacy = os.path.join(app.static_folder, "uploads", "avatars", f"student_{int(user_id)}.jpg")
+        legacy = os.path.join(app.static_folder, "uploads", "avatars", f"student_{user_id}.jpg")
         if os.path.exists(legacy):
             os.remove(legacy)
         _refresh_classroom_gallery()

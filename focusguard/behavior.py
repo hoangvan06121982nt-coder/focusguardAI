@@ -175,6 +175,11 @@ class BehaviorAnalyzer:
             if self._signals[kind].episode is not None:
                 self.focus_state = kind
                 break
+        else:
+            if obs.face_visible is False:
+                # Body visible but no face: eyes/head cannot be measured, so
+                # the state is unknown (score frozen), never "focused".
+                self.focus_state = rs.FOCUS_UNKNOWN
 
     def _step_signal(self, t: _SignalTracker, on: bool, conf: Optional[float], now: float,
                      obs: Observation, out: BehaviorUpdate):

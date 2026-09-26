@@ -117,8 +117,7 @@ class IdentityManager:
     def __init__(self, gallery: Optional[Dict[int, Sequence[float]]] = None,
                  config: IdentityConfig = DEFAULT_CONFIG.identity):
         self.config = config
-        self._gallery_ids: List[int] = []
-        self._gallery_mat: Optional[np.ndarray] = None
+        self._gallery: Tuple[List[int], Optional[np.ndarray]] = ([], None)
         self.tracks: Dict[int, TrackIdentity] = {}
         self._owner: Dict[int, int] = {}                    # student_id -> track_id
         self._cooldown_until: Dict[int, float] = {}         # student_id -> ts
@@ -137,30 +136,31 @@ class IdentityManager:
                 continue
             ids.append(int(sid))
             rows.append(vec)
-        self._gallery_ids = ids
-        self._gallery_mat = np.vstack(rows) if rows else None
+        # Swap ids+matrix together so a concurrent match() never sees a mix.
+        self._gallery = (ids, np.vstack(rows) if rows else None)
         # Students removed from the gallery lose any binding.
         for sid in list(self._owner):
-            if sid not in ids:
+            if sid not in self._gallery[0]:
                 self._release(self._owner[sid], reason="gallery_removed", now=None)
 
     @property
     def gallery_size(self) -> int:
-        return len(self._gallery_ids)
+        return len(self._gallery[0])
 
     def match(self, embedding) -> MatchResult:
         vec = _normalize(embedding)
         if vec is None:
             return MatchResult(NO_FACE)
-        if self._gallery_mat is None or vec.shape[0] != self._gallery_mat.shape[1]:
+        gallery_ids, gallery_mat = self._gallery
+        if gallery_mat is None or vec.shape[0] != gallery_mat.shape[1]:
             return MatchResult(NO_MATCH)
-        sims = self._gallery_mat @ vec
+        sims = gallery_mat @ vec
         order = np.argsort(-sims)
         best_i = int(order[0])
         best_sim = float(sims[best_i])
         second_sim = float(sims[int(order[1])]) if len(order) > 1 else -1.0
-        second_id = self._gallery_ids[int(order[1])] if len(order) > 1 else None
-        res = MatchResult(NO_MATCH, self._gallery_ids[best_i], best_sim, second_id, max(second_sim, 0.0))
+        second_id = gallery_ids[int(order[1])] if len(order) > 1 else None
+        res = MatchResult(NO_MATCH, gallery_ids[best_i], best_sim, second_id, max(second_sim, 0.0))
         if best_sim < self.config.similarity_threshold:
             res.outcome = NO_MATCH
         elif best_sim - max(second_sim, 0.0) < self.config.min_margin:
@@ -231,8 +231,10 @@ class IdentityManager:
 
     def _observe_locked(self, t: TrackIdentity, m: MatchResult, now: float):
         accepted = m.accepted_id
-        if accepted is None:
-            # Blurred / turned face: keep the lock, do not count as contradiction.
+        clear_non_match = (m.outcome == NO_MATCH and
+                           m.best_similarity < self.config.similarity_threshold - self.config.min_margin)
+        if accepted is None and not clear_non_match:
+            # No face / ambiguous / borderline: keep the lock, not a contradiction.
             return
         if accepted == t.student_id:
             t.contradict_count = 0
@@ -245,13 +247,15 @@ class IdentityManager:
         t.contradict_count += 1
         if (t.contradict_count >= self.config.unlock_consecutive
                 and now - (t.contradict_since or now) >= self.config.unlock_min_seconds):
+            # A clearly different face (another student, or someone not enrolled
+            # after a tracker id switch) must not keep this student's identity.
             released = t.student_id
             self._release(t.track_id, reason="contradicted", now=now)
             self._cooldown_until[released] = now + self.config.conflict_cooldown_seconds
             t.status = UNCERTAIN
             t.candidate_id = accepted
-            t.candidate_count = 1
-            t.candidate_since = now
+            t.candidate_count = 1 if accepted is not None else 0
+            t.candidate_since = now if accepted is not None else None
 
     def _observe_unlocked(self, t: TrackIdentity, m: MatchResult, now: float):
         accepted = m.accepted_id

@@ -1581,7 +1581,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const classId = classSelect.value;
                 localStorage.setItem('selectedClassId', classId);
                 if (window.teacherSocketGlobal && window.teacherSocketGlobal.connected) {
-                    window.teacherSocketGlobal.emit('request_class_snapshot', {});
+                    window.teacherSocketGlobal.emit('request_class_snapshot', { class_id: selectedClassId() });
                 } else {
                     pollTeacherData();
                 }
@@ -2074,7 +2074,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     wsIndicator.textContent = '⚡ Trực tiếp';
                 }
                 teacherSocket.emit('join_teacher_room', {});
-                teacherSocket.emit('request_class_snapshot', {});
+                teacherSocket.emit('request_class_snapshot', { class_id: selectedClassId() });
             });
 
             teacherSocket.on('disconnect', () => {
@@ -2097,8 +2097,9 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             teacherSocket.on('class_snapshot', (data) => {
-                const classSelect = document.getElementById('select-class-monitor');
-                const classId = classSelect ? parseInt(classSelect.value) : 1;
+                const classId = selectedClassId();
+                // A teacher is in the rooms of all their classes: ignore other classes' snapshots.
+                if (data.class_id !== undefined && data.class_id !== null && data.class_id !== classId) return;
                 const filteredStudents = data.students.filter(s => s.class_id === classId);
                 cachedStudents = filteredStudents;
                 
@@ -2161,7 +2162,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.log('[WS] Student online:', data.name);
                 showToastNotification(`🟢 ${data.name} vừa kết nối vào lớp!`, 'success');
                 // Re-request snapshot to get updated online count
-                teacherSocket.emit('request_class_snapshot', {});
+                teacherSocket.emit('request_class_snapshot', { class_id: selectedClassId() });
             });
 
             // ⚡ REALTIME: Student video frame pushed from student browser
@@ -3523,13 +3524,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     const tr = document.createElement('tr');
                     tr.innerHTML = `
                         <td>${c.id}</td>
-                        <td><strong>${c.class_name}</strong></td>
+                        <td><strong>${escapeHtml(c.class_name)}</strong></td>
                         <td><span class="badge bg-info-subtle text-info border border-info px-2 py-1">${c.student_count || 0} Học sinh</span></td>
                         <td class="text-end">
-                            <button class="btn btn-sm btn-outline-primary edit-class-btn me-2" data-id="${c.id}" data-name="${c.class_name}" title="Sửa">
+                            <button class="btn btn-sm btn-outline-primary edit-class-btn me-2" data-id="${c.id}" data-name="${escapeHtml(c.class_name)}" title="Sửa">
                                 <i class="fa-solid fa-pen-to-square"></i>
                             </button>
-                            <button class="btn btn-sm btn-outline-danger delete-class-btn" data-id="${c.id}" data-name="${c.class_name}" title="Xóa">
+                            <button class="btn btn-sm btn-outline-danger delete-class-btn" data-id="${c.id}" data-name="${escapeHtml(c.class_name)}" title="Xóa">
                                 <i class="fa-solid fa-trash"></i>
                             </button>
                         </td>
@@ -3593,7 +3594,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td>${u.id}</td>
-                    <td><strong>${u.username}</strong></td>
+                    <td><strong>${escapeHtml(u.username)}</strong></td>
                     <td>
                         <div class="d-flex align-items-center gap-2">
                             ${u.role === 'student' ? `
@@ -3601,27 +3602,27 @@ document.addEventListener('DOMContentLoaded', () => {
                                      alt="Avatar" 
                                      class="rounded-circle border" 
                                      style="width: 32px; height: 32px; object-fit: cover;"
-                                     onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2232%22 height=%2232%22 viewBox=%220 0 32 32%22><circle cx=%2216%22 cy=%2216%22 r=%2216%22 fill=%22%236c757d%22/><text x=%2250%%22 y=%2255%%22 fill=%22white%22 font-size=%2212%22 font-family=%22Arial%22 dy=%22.3em%22 text-anchor=%22middle%22>${u.display_name.charAt(0)}</text></svg>'">
+                                     onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2232%22 height=%2232%22 viewBox=%220 0 32 32%22><circle cx=%2216%22 cy=%2216%22 r=%2216%22 fill=%22%236c757d%22/><text x=%2250%%22 y=%2255%%22 fill=%22white%22 font-size=%2212%22 font-family=%22Arial%22 dy=%22.3em%22 text-anchor=%22middle%22>${escapeHtml(String(u.display_name || '').charAt(0))}</text></svg>'">
                             ` : `
                                 <div class="rounded-circle bg-light border d-flex align-items-center justify-content-center text-muted" style="width: 32px; height: 32px; font-size: 12px; font-weight: bold;">
-                                    ${u.display_name.charAt(0)}
+                                    ${escapeHtml(String(u.display_name || '').charAt(0))}
                                 </div>
                             `}
-                            <span>${u.display_name}</span>
+                            <span>${escapeHtml(u.display_name)}</span>
                         </div>
                     </td>
                     <td><span class="badge ${u.role === 'admin' ? 'bg-danger' : (u.role === 'teacher' ? 'bg-primary' : 'bg-success')}">${u.role === 'admin' ? 'Quản trị viên' : (u.role === 'teacher' ? 'Giáo viên' : 'Học sinh')}</span></td>
-                    <td>${u.class_name}</td>
+                    <td>${escapeHtml(u.class_name)}</td>
                     <td class="text-end">
                         ${u.role === 'student' ? `
-                        <button class="btn btn-sm ${u.has_face ? 'btn-success' : 'btn-outline-info'} register-face-btn me-2" data-id="${u.id}" data-display-name="${u.display_name}" data-has-face="${u.has_face}" title="${u.has_face ? 'Đã đăng ký khuôn mặt' : 'Chụp/Đăng ký khuôn mặt'}">
+                        <button class="btn btn-sm ${u.has_face ? 'btn-success' : 'btn-outline-info'} register-face-btn me-2" data-id="${u.id}" data-display-name="${escapeHtml(u.display_name)}" data-has-face="${u.has_face}" title="${u.has_face ? 'Đã đăng ký khuôn mặt' : 'Chụp/Đăng ký khuôn mặt'}">
                             <i class="fa-solid ${u.has_face ? 'fa-user-check' : 'fa-camera'}"></i>
                         </button>
                         ` : ''}
-                        <button class="btn btn-sm btn-outline-primary edit-user-btn me-2" data-id="${u.id}" data-username="${u.username}" data-display-name="${u.display_name}" data-role="${u.role}" data-class-id="${u.class_id || ''}" title="Sửa tài khoản">
+                        <button class="btn btn-sm btn-outline-primary edit-user-btn me-2" data-id="${u.id}" data-username="${escapeHtml(u.username)}" data-display-name="${escapeHtml(u.display_name)}" data-role="${u.role}" data-class-id="${u.class_id || ''}" title="Sửa tài khoản">
                             <i class="fa-solid fa-user-gear"></i>
                         </button>
-                        <button class="btn btn-sm btn-outline-danger delete-user-btn" data-id="${u.id}" data-username="${u.username}" title="Xóa tài khoản">
+                        <button class="btn btn-sm btn-outline-danger delete-user-btn" data-id="${u.id}" data-username="${escapeHtml(u.username)}" title="Xóa tài khoản">
                             <i class="fa-solid fa-trash"></i>
                         </button>
                     </td>
