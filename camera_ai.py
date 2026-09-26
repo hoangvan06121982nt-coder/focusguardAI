@@ -1,230 +1,126 @@
+"""Personal / online-class camera pipeline (one student in front of a webcam).
+
+Produces observations only. The authenticated ``student_id`` is the identity
+(the camera belongs to the logged-in student); no score is computed here.
+Everything is routed to SessionManager -> the single SessionRuntime/FocusEngine
+currently responsible for that student.
+
+Requires hardware + model weights (OpenCV, MediaPipe, YOLOv8).
+"""
+import time
+
 import cv2
 import mediapipe as mp
+import numpy as np
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
-import numpy as np
-import math
-import time
 from ultralytics import YOLO
 
+from focusguard.association import associate_phones
+from focusguard.behavior import Observation
+from focusguard.vision_metrics import mean_ear
+from focusguard import runtime_state as rs
+
+STATE_COLORS = {
+    rs.FOCUS_FOCUSED: (0, 200, 0),
+    rs.FOCUS_PHONE: (0, 0, 255),
+    rs.FOCUS_DROWSY: (0, 165, 255),
+    rs.FOCUS_HEAD_AWAY: (0, 255, 255),
+}
+
+
 class FocusAI:
-    def __init__(self, session_manager):
+    mode = "personal"
+
+    def __init__(self, session_manager, student_id, camera_index=0):
         self.session_manager = session_manager
-        
+        self.student_id = int(student_id)
+        self.camera_index = camera_index
+        self.config = session_manager.config.behavior
         self.yolo_model = YOLO("yolov8n.pt")
-        
-        # Initialize MediaPipe Face Landmarker
-        base_options = python.BaseOptions(model_asset_path='face_landmarker.task')
-        options = vision.FaceLandmarkerOptions(base_options=base_options,
-                                               output_face_blendshapes=False,
-                                               output_facial_transformation_matrixes=True,
-                                               num_faces=5)
+        options = vision.FaceLandmarkerOptions(
+            base_options=python.BaseOptions(model_asset_path="face_landmarker.task"),
+            output_face_blendshapes=False,
+            output_facial_transformation_matrixes=True,
+            num_faces=2,
+        )
         self.detector = vision.FaceLandmarker.create_from_options(options)
-        
-        self.cap = cv2.VideoCapture(0)
-        
-        # macOS AVFoundation needs time to warm up — discard initial empty frames
-        print("[CAMERA] Warming up camera...")
-        for _ in range(30):
-            ret, _ = self.cap.read()
-            if ret:
-                print("[CAMERA] Camera ready.")
+        self.cap = cv2.VideoCapture(camera_index)
+        for _ in range(30):  # macOS AVFoundation warm-up
+            ok, _ = self.cap.read()
+            if ok:
                 break
             time.sleep(0.1)
-        else:
-            print("[CAMERA] Warning: camera warm-up did not produce a valid frame.")
-        
-        self.looking_away_start = None
-        self.drowsy_start = None
-        
-        custom_settings = getattr(self.session_manager, 'settings', {})
-        self.EAR_THRESHOLD = custom_settings.get('ear_threshold', 0.22)
-        self.DROWSY_TIME_THRESH = custom_settings.get('drowsy_threshold', 1.5)
-        self.DISTRACTION_TIME_THRESH = custom_settings.get('distraction_threshold', 2.0)
-        self.current_state = "TAP TRUNG"
-        
-    def calculate_ear(self, landmarks, eye_indices):
-        def distance(p1, p2):
-            return math.dist([p1.x, p1.y], [p2.x, p2.y])
-            
-        v1 = distance(landmarks[eye_indices[1]], landmarks[eye_indices[5]])
-        v2 = distance(landmarks[eye_indices[2]], landmarks[eye_indices[4]])
-        h = distance(landmarks[eye_indices[0]], landmarks[eye_indices[3]])
-        
-        if h == 0: return 0
-        return (v1 + v2) / (2.0 * h)
+        self.current_state = rs.FOCUS_UNKNOWN
+
+    def _offline_frame(self, text):
+        dummy = np.zeros((480, 640, 3), dtype=np.uint8)
+        cv2.putText(dummy, text, (110, 240), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
+        _, buf = cv2.imencode(".jpg", dummy)
+        return buf.tobytes()
 
     def get_frame(self):
         if not self.cap.isOpened():
-            self.cap.open(0)
-            
-        success, frame = self.cap.read()
-        if not success:
-            self.cap.release()
-            self.cap.open(0)
-            success, frame = self.cap.read()
-            
-        if not success:
-            # Reset timers so stale state doesn't carry over when camera recovers
-            self.looking_away_start = None
-            self.drowsy_start = None
-            # Create a dummy frame to avoid infinite loop in app.py
-            dummy = np.zeros((480, 640, 3), dtype=np.uint8)
-            cv2.putText(dummy, "CAMERA KHONG KHA DUNG", (130, 240), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
-            ret, buffer = cv2.imencode('.jpg', dummy)
-            time.sleep(0.5) # prevent burning CPU
-            return buffer.tobytes(), False, "Không có Camera"
-            
+            self.cap.open(self.camera_index)
+        ok, frame = self.cap.read()
+        if not ok:
+            time.sleep(0.5)
+            return self._offline_frame("CAMERA KHONG KHA DUNG"), False, "NO_CAMERA_SIGNAL"
+
+        now = time.time()
         frame = cv2.flip(frame, 1)
-        h, w, c = frame.shape
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        
-        results = self.yolo_model(rgb_frame, classes=[0, 67], verbose=False)
-        phone_detected = False
-        person_count = 0
-        for r in results:
-            boxes = r.boxes
-            for box in boxes:
+        h, w = frame.shape[:2]
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+        persons, phones = {}, []
+        for r in self.yolo_model(rgb, classes=[0, 67], verbose=False):
+            for i, box in enumerate(r.boxes):
                 cls_id = int(box.cls[0])
-                x1, y1, x2, y2 = map(int, box.xyxy[0])
+                x1, y1, x2, y2 = map(float, box.xyxy[0])
+                conf = float(box.conf[0])
                 if cls_id == 67:
-                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
-                    cv2.putText(frame, "PHAT HIEN DIEN THOAI", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
-                    phone_detected = True
+                    phones.append(((x1, y1, x2, y2), conf))
                 elif cls_id == 0:
-                    person_count += 1
-                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 255), 1)
-        
-        # MediaPipe Tasks API
-        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
-        detection_result = self.detector.detect(mp_image)
-        
-        drowsy = False
-        distracted = False
-        multiple_people_detected = False
-        status_text = "TAP TRUNG"
-        color = (0, 255, 0)
-        
-        num_faces_detected = len(detection_result.face_landmarks) if detection_result.face_landmarks else 0
-        if num_faces_detected >= 2 or person_count >= 2:
-            multiple_people_detected = True
-            
-        if detection_result.face_landmarks:
-            face_landmarks = detection_result.face_landmarks[0]
-            matrix = detection_result.facial_transformation_matrixes[0]
-            
-            # EAR calculation
-            left_eye_indices = [362, 385, 387, 263, 373, 380]
-            right_eye_indices = [33, 160, 158, 133, 153, 144]
-            
-            left_ear = self.calculate_ear(face_landmarks, left_eye_indices)
-            right_ear = self.calculate_ear(face_landmarks, right_eye_indices)
-            avg_ear = (left_ear + right_ear) / 2.0
-            
-            if avg_ear < self.EAR_THRESHOLD:
-                if self.drowsy_start is None:
-                    self.drowsy_start = time.time()
-                elif time.time() - self.drowsy_start > self.DROWSY_TIME_THRESH:
-                    drowsy = True
-            else:
-                self.drowsy_start = None
-            
-            # Head Pose from transformation matrix
-            rmat = matrix[0:3, 0:3]
-            angles, _, _, _, _, _ = cv2.RQDecomp3x3(rmat)
-            pitch, yaw, roll = angles[0], angles[1], angles[2]
-            
-            if yaw < -20 or yaw > 20 or pitch < -20 or pitch > 20:
-                if self.looking_away_start is None:
-                    self.looking_away_start = time.time()
-                elif time.time() - self.looking_away_start > self.DISTRACTION_TIME_THRESH:
-                    distracted = True
-            else:
-                self.looking_away_start = None
-                
-            # Draw Viewfinder Bounding Box for the first face
-            x_min, y_min = w, h
-            x_max, y_max = 0, 0
-            for lm in face_landmarks:
-                x, y = int(lm.x * w), int(lm.y * h)
-                if x < x_min: x_min = x
-                if x > x_max: x_max = x
-                if y < y_min: y_min = y
-                if y > y_max: y_max = y
-                
-            # Add padding
-            padding = 20
-            x_min = max(0, x_min - padding)
-            y_min = max(0, y_min - padding)
-            x_max = min(w, x_max + padding)
-            y_max = min(h, y_max + padding)
-            
-            # Determine color based on state
-            if multiple_people_detected:
-                box_color = (0, 0, 255) # Red
-            elif phone_detected or drowsy:
-                box_color = (0, 0, 255) # Red
-            elif distracted:
-                box_color = (0, 165, 255) # Orange
-            else:
-                box_color = (255, 210, 0) # Cyan (Light Blue)
-                
-            length = 30
-            thickness = 3
-            # Draw corners
-            cv2.line(frame, (x_min, y_min), (x_min + length, y_min), box_color, thickness)
-            cv2.line(frame, (x_min, y_min), (x_min, y_min + length), box_color, thickness)
-            
-            cv2.line(frame, (x_max, y_min), (x_max - length, y_min), box_color, thickness)
-            cv2.line(frame, (x_max, y_min), (x_max, y_min + length), box_color, thickness)
-            
-            cv2.line(frame, (x_min, y_max), (x_min + length, y_max), box_color, thickness)
-            cv2.line(frame, (x_min, y_max), (x_min, y_max - length), box_color, thickness)
-            
-            cv2.line(frame, (x_max, y_max), (x_max - length, y_max), box_color, thickness)
-            cv2.line(frame, (x_max, y_max), (x_max, y_max - length), box_color, thickness)
-            
-            # Text on top
-            if multiple_people_detected:
-                status_text = "PHAT HIEN NHIEU NGUOI"
-                cv2.putText(frame, "CANH BAO: CO 2 NGUOI TRO LEN", (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-            elif phone_detected:
-                status_text = "DUNG DIEN THOAI"
-            elif drowsy:
-                status_text = "BUON NGU"
-            elif distracted:
-                status_text = "NGOANH MAT DI"
-                
-            color = box_color
-        else:
-            if person_count >= 2:
-                multiple_people_detected = True
-                status_text = "PHAT HIEN NHIEU NGUOI"
-                color = (0, 0, 255)
-                cv2.putText(frame, "CANH BAO: CO 2 NGUOI TRO LEN", (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-            else:
-                if self.looking_away_start is None:
-                    self.looking_away_start = time.time()
-                elif time.time() - self.looking_away_start > self.DISTRACTION_TIME_THRESH:
-                    distracted = True
-                    status_text = "KHONG THAY KHUON MAT"
-                    color = (0, 165, 255)
-                
-        if self.session_manager.is_active:
-            self.session_manager.record_history(status_text)
-            
-            if multiple_people_detected:
-                self.session_manager.update_score(2.0, "Phát hiện nhiều người")
-            elif phone_detected:
-                self.session_manager.update_score(1.5, "Dùng điện thoại")
-            elif drowsy:
-                self.session_manager.update_score(1.0, "Buồn ngủ / Ngủ gật")
-            elif distracted:
-                self.session_manager.update_score(0.5, "Ngoảnh mặt đi")
-                
-        self.current_state = status_text
-        ret, buffer = cv2.imencode('.jpg', frame)
-        return buffer.tobytes(), status_text != "TAP TRUNG", status_text
-        
+                    persons[i] = (x1, y1, x2, y2)
+
+        result = self.detector.detect(mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb))
+        faces = result.face_landmarks or []
+        ear = yaw = pitch = None
+        if faces:
+            ear = mean_ear(faces[0])
+            angles, *_ = cv2.RQDecomp3x3(np.asarray(result.facial_transformation_matrixes[0])[0:3, 0:3])
+            pitch, yaw = float(angles[0]), float(angles[1])
+
+        # The student is the largest person box (or the face if no person box).
+        phone_conf = None
+        if persons:
+            main_id = max(persons, key=lambda k: (persons[k][2] - persons[k][0]) * (persons[k][3] - persons[k][1]))
+            phone_conf = associate_phones({main_id: persons[main_id]}, phones,
+                                          self.config.phone_min_confidence,
+                                          self.config.phone_min_containment).get(main_id)
+        visible = bool(faces) or bool(persons)
+        obs = Observation(timestamp=now, visible=visible, face_visible=bool(faces), ear=ear, yaw=yaw,
+                          pitch=pitch, phone_confidence=phone_conf, source="personal_camera",
+                          extra={"people_in_frame": max(len(persons), len(faces))})
+        self.session_manager.route_observation(self.student_id, obs)
+
+        view = self.session_manager.student_live_view(self.student_id).get("student") or {}
+        self.current_state = view.get("focus_state", rs.FOCUS_UNKNOWN)
+        color = STATE_COLORS.get(self.current_state, (200, 200, 200))
+        for (x1, y1, x2, y2), conf in phones:
+            if conf >= self.config.phone_min_confidence:
+                cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 0, 255), 2)
+        if faces:
+            xs = [lm.x * w for lm in faces[0]]
+            ys = [lm.y * h for lm in faces[0]]
+            cv2.rectangle(frame, (int(min(xs)) - 15, int(min(ys)) - 15), (int(max(xs)) + 15, int(max(ys)) + 15), color, 2)
+        label = rs.VI_LABELS.get(self.current_state, self.current_state)
+        score = view.get("focus_score")
+        cv2.putText(frame, f"{self.current_state} {'' if score is None else score}", (20, 40),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
+        _, buf = cv2.imencode(".jpg", frame)
+        return buf.tobytes(), self.current_state not in (rs.FOCUS_FOCUSED, rs.FOCUS_UNKNOWN), label
+
     def release(self):
-        self.cap.release()
+        if self.cap is not None and self.cap.isOpened():
+            self.cap.release()
