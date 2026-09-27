@@ -80,22 +80,23 @@ Camera → YOLOv8+ByteTrack (temporary track_id) → InsightFace → IdentityMan
 
 ## Verification
 - `bash scripts/ci_check.sh`: compile, imports, pytest, JS syntax, security scan, synthetic evaluation.
-- **126 passed / 0 failed / 9 skipped** (3 HARDWARE_REQUIRED, 6 EMULATOR_REQUIRED).
-- **Firestore on the emulator**: `bash scripts/firestore_emulator_check.sh`, 6/6 passed (accounts and hashing,
-  migration, membership, embeddings, sessions/events/snapshots/session_students, full class lifecycle); the app
-  also logs in and runs a class on the emulator. Firestore production has not been tested.
-- **Real models on Apple Silicon (arm64, Python 3.12)**: `requirements.txt` installs; YOLOv8, MediaPipe and
-  InsightFace load (2 of the 3 hardware tests pass); both camera pipelines initialise and degrade to
-  NO_CAMERA_SIGNAL without crashing.
-- **Webcam not verified yet**: macOS denies camera access to processes started by the Claude app, so the camera
-  test and the real-camera scenarios must be run from Terminal.app
-  (`tools/real_camera_check.py`, see `docs/REAL_CAMERA_VERIFICATION.md`). **Do not merge before that run passes.**
-- **GitHub Actions: PASS** (see the checks on this PR).
-- Manual smoke test in a browser (dev server + SQLite): teacher, student, parent and admin pages render with
-  no console errors; the authenticated socket connects; empty data shows N/A; an XSS payload in a display
-  name renders as text.
+- **142 passed / 0 failed / 9 skipped** (3 HARDWARE_REQUIRED in CI, 6 EMULATOR_REQUIRED).
+- **GitHub Actions: PASS** on the PR head.
+- **Firestore on the emulator**: `bash scripts/firestore_emulator_check.sh`, 6/6 passed; production Firestore has not been tested.
+- **Hardware (MacBook Air M3, FaceTime HD)**: hardware tests **3/3 PASS**. The real web app runs with the webcam
+  (1920x1080 `/video_feed`, runtime ACTIVE, authenticated websocket, no console errors).
+- **Real-camera scenarios** (`tools/real_camera_check.py`, one consenting volunteer, about 7.5 FPS): identity, blink, quick glance,
+  phone, leave/return, camera interrupt and end-class **PASS**; crossing and unknown person are **USER_ACTION_REQUIRED**
+  (they need more volunteers). This is an integration/behaviour check, **not** an accuracy measurement. See
+  `docs/REAL_CAMERA_RESULTS.md`.
+- Real camera runs found 5 real bugs (close-up face association, identity loss under phone occlusion, fixed-EAR
+  false drowsiness, duplicate-tracker-id flicker, fragmented phone signal). All are fixed, each with a regression
+  test built from the logged values.
 
 ## Known limitations (not blocking, documented)
+- During the leave/return scenario one extra low-confidence (0.12) 3.5 s PHONE episode came from sparse 0.25-0.46
+  detections; ground truth is unknown.
+- EAR cannot distinguish closed eyes from looking far down (except while a phone is in use).
 - A personal session linked to an online class stores its events under the class session, so
   `/api/session/<id>/breakdown` for that personal session shows no events.
 - One of several open student tabs disconnecting marks the student OFFLINE until the next reconnect.
@@ -103,7 +104,7 @@ Camera → YOLOv8+ByteTrack (temporary track_id) → InsightFace → IdentityMan
   `DEMO_ACCOUNT_PASSWORD`, default `123`). Set `FOCUSGUARD_ENV=production` for deployments.
 
 ## Remaining blockers (not solved by this PR)
-1. **Real webcam**: the camera hardware test and the scenarios in `docs/REAL_CAMERA_VERIFICATION.md` have not been run yet (guided harness: `tools/real_camera_check.py`).
+1. **Real webcam**: verified with one volunteer. Crossing and unknown-person scenarios need additional consenting volunteers.
 2. **Labelled real-world dataset**: accuracy is `NOT_EVALUATED`.
 3. **Firestore**: verified on the emulator only; production Firestore has not been tested.
 4. **Old git history** still contains sensitive artifacts (face photo, emulator export with demo accounts,

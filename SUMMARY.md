@@ -29,15 +29,15 @@ từ dữ liệu thật. Mọi tuyên bố về "AI" được giới hạn ở n
 * Độ chính xác thực tế: **NOT_EVALUATED**. Phần cứng: **HARDWARE_REQUIRED**.
 
 ## Kết quả kiểm thử (máy local, `bash scripts/ci_check.sh`)
-126 passed, 0 failed, 9 skipped (3 HARDWARE_REQUIRED, 6 EMULATOR_REQUIRED). Firestore emulator: 6/6 PASS.
+142 passed, 0 failed, 9 skipped (3 HARDWARE_REQUIRED, 6 EMULATOR_REQUIRED). Firestore emulator: 6/6 PASS. Hardware 3/3 PASS; camera thật: kịch bản 1–5, 8, 9 PASS (xem docs/REAL_CAMERA_RESULTS.md).
 
 ## Việc còn lại
 1. Thu thập bộ dữ liệu lớp học thật có nhãn và có đồng ý → chạy `scripts/run_evaluation.py --real-dataset`.
-2. Đo FPS/độ trễ trên phần cứng thi (`FOCUSGUARD_HARDWARE_TESTS=1 pytest tests/hardware`).
+2. Đo FPS và độ trễ trên phần cứng thi nếu khác MacBook Air M3 (khoảng 7.5 FPS).
 3. Quyết định về lịch sử git (ảnh khuôn mặt, export emulator, khoá giả trong commit cũ) – xem
    `docs/PRIVACY_AND_AI_SAFETY.md`.
 4. Firestore: đã kiểm tra trên emulator (`scripts/firestore_emulator_check.sh`); Firestore production chưa kiểm tra.
-5. Chạy với webcam thật: chạy `tools/real_camera_check.py` từ Terminal.app.
+5. Kịch bản camera 6–7 (hai người cắt nhau, người lạ) cần thêm tình nguyện viên.
 
 Tài liệu: [docs/COMPETITION_ARCHITECTURE.md](docs/COMPETITION_ARCHITECTURE.md) ·
 [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) · [docs/PRIVACY_AND_AI_SAFETY.md](docs/PRIVACY_AND_AI_SAFETY.md)

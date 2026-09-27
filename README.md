@@ -13,22 +13,24 @@ Có bốn vai trò: **Học sinh**, **Giáo viên**, **Phụ huynh**, **Quản t
 
 **Đã kiểm chứng**
 * Kiến trúc lõi (IdentityManager, FocusEngine duy nhất theo thời gian, SessionRuntime, realtime do máy chủ quyết định,
-  phân quyền theo quyền sở hữu): `bash scripts/ci_check.sh`, 126 test pass, GitHub Actions xanh.
+  phân quyền theo quyền sở hữu): `bash scripts/ci_check.sh`, 142 test pass, GitHub Actions xanh.
 * Bảo mật và repo công khai: `scripts/security_check.py` PASS trên tree hiện tại.
 * Firestore backend **trên emulator**: `bash scripts/firestore_emulator_check.sh` (6 test hợp đồng).
-* Model thật trên macOS Apple Silicon: YOLOv8, MediaPipe và InsightFace load được, và cả hai pipeline camera khởi tạo được.
+* **Phần cứng và camera thật** (MacBook Air M3, FaceTime HD, khoảng 7.5 FPS): hardware tests 3/3 PASS; ứng dụng web chạy với webcam;
+  các kịch bản 1–5, 8, 9 PASS, kịch bản 6–7 cần thêm tình nguyện viên. Xem `docs/REAL_CAMERA_RESULTS.md`
+  (đây là kiểm tra tích hợp và hành vi, **không phải** đánh giá độ chính xác).
 
-**Chưa kiểm chứng / chưa đánh giá**
-* Chạy với webcam thật: chưa chạy xong. Quy trình và công cụ ở `docs/REAL_CAMERA_VERIFICATION.md` và
-  `tools/real_camera_check.py`. Trên macOS, lệnh phải chạy từ Terminal.app vì cần quyền Camera.
+**Chưa đánh giá**
 * Độ chính xác ngoài thực tế: **NOT_EVALUATED** (chưa có bộ dữ liệu có nhãn và có sự đồng ý).
+* Hai người cắt nhau và người lạ trên camera thật: cần thêm tình nguyện viên.
 * Firestore production (Cloud): chưa kiểm tra.
 
 **Hạn chế đã biết**
 * Lịch sử git cũ còn tài sản nhạy cảm (ảnh khuôn mặt, export emulator, `.env` cũ, khoá giả của emulator). Không viết lại
   lịch sử trong nhánh này; xem `docs/PRIVACY_AND_AI_SAFETY.md`.
+* Heuristic EAR không phân biệt nhắm mắt với nhìn xuống rất thấp; YOLOv8n phát hiện điện thoại với độ tin cậy dao động.
 * `mediapipe` kéo theo `opencv-contrib-python` 5.x, đè lên bản `opencv-python` 4.13 được pin.
-* Xem thêm mục Known limitations trong `PR_DESCRIPTION.md`.
+* Trên macOS, lệnh cần camera phải chạy từ Terminal.app (quyền Camera).
 
 ## Kiến trúc
 

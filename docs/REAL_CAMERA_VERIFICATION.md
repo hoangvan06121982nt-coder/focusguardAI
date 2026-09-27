@@ -29,6 +29,9 @@ Biến môi trường mà code thực sự đọc (không có `CAMERA_MODE`; pip
 | `HOST`, `PORT` | mặc định `127.0.0.1:5001` |
 | `FG_*` | ghi đè ngưỡng (xem `focusguard/config.py`); **để mặc định** khi test |
 
+> Trên macOS, chạy các lệnh cần camera từ **Terminal.app** (đã được cấp quyền Camera). Kết quả lần chạy cuối:
+> `docs/REAL_CAMERA_RESULTS.md`.
+
 ## 1. Test phần cứng tự động
 
 ```bash
