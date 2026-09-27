@@ -71,9 +71,22 @@ def associate_faces(persons: Dict[int, Box], faces: List[Box],
     return out
 
 
+def expand(b: Box, margin: float) -> Box:
+    w, h = b[2] - b[0], b[3] - b[1]
+    return (b[0] - margin * w, b[1] - margin * h, b[2] + margin * w, b[3] + margin * h)
+
+
 def associate_phones(persons: Dict[int, Box], phones: List[Tuple[Box, float]],
-                     min_confidence: float, min_containment: float) -> Dict[int, float]:
-    """Return ``{track_id: phone_confidence}`` (max over phones assigned to it)."""
+                     min_confidence: float, min_containment: float,
+                     reach_margin: float = 0.25) -> Dict[int, float]:
+    """Return ``{track_id: phone_confidence}`` (max over phones assigned to it).
+
+    Containment is measured against the person box grown by ``reach_margin``
+    on every side: a phone is held in the hands, which person detectors often
+    leave outside the body box (real webcam run: a detected phone, conf up to
+    0.82, was not associated in 71 of 84 frames). Each phone still goes to at
+    most one person (highest containment, then nearest centre).
+    """
     out: Dict[int, float] = {}
     for pbox, conf in phones:
         if conf is None or conf < min_confidence:
@@ -81,7 +94,7 @@ def associate_phones(persons: Dict[int, Box], phones: List[Tuple[Box, float]],
         best: Optional[Tuple[float, float, int]] = None
         pc = center(pbox)
         for tid, person in persons.items():
-            c = containment(pbox, person)
+            c = containment(pbox, expand(person, reach_margin))
             if c < min_containment:
                 continue
             bc = center(person)

@@ -113,6 +113,52 @@ def verdict_identity(log, sid=STUDENT_A):
             "duplicate_frames": len(dup), "score_resets": len(resets), "wrong_identity_frames": len(wrong)}
 
 
+def _closures(frames, sid, closed_below=0.12):
+    """Measured eye-closure runs (seconds) from logged EAR of the student's track."""
+    runs, start, last = [], None, None
+    for f in frames:
+        tid = str(_student(f, sid).get("active_track_id"))
+        lm = (f.get("detector") or {}).get("landmarks", {}).get(tid)
+        ear = lm[0] if lm else None
+        if ear is not None and ear < closed_below:
+            start = f["t"] if start is None else start
+            last = f["t"]
+        elif start is not None:
+            runs.append((start, last))
+            start = None
+    if start is not None:
+        runs.append((start, last))
+    return runs
+
+
+def verdict_blink(log, sid=STUDENT_A, min_seconds=1.5, frame_dt=0.14):
+    """Short closures (blinks) must never create DROWSY; closures measured as
+    sustained (>= min_seconds) are expected to, and are reported separately."""
+    fr = _frames(log, "S2")
+    if not fr:
+        return {"status": "NOT_RUN"}
+    if not any((f.get("detector") or {}).get("landmarks") for f in fr):
+        return verdict_no_episode(log, "S2", "DROWSY", sid)       # older logs without EAR
+    # Closures are measured over the whole log so one that started before the
+    # scenario window is not truncated into a "blink".
+    runs = [(a, b) for a, b in _closures(log["frames"], sid) if b >= fr[0]["t"] - 2 and a <= fr[-1]["t"]]
+    eps = _episodes_started(log, sid, "DROWSY", fr[0]["t"] - 2, fr[-1]["t"])
+    short = [(a, b) for a, b in runs if b - a + frame_dt < min_seconds]
+    long_ = [(a, b) for a, b in runs if b - a + frame_dt >= min_seconds]
+
+    def overlaps(ep, a, b):
+        end = ep.get("end_time") or ep["start_time"] + (ep.get("duration") or 0)
+        return ep["start_time"] <= b + 0.5 and end >= a - 0.5
+    false_alerts = [e for e in eps if not any(overlaps(e, a, b) for a, b in long_)]
+    measured = sum(1 for f in fr if _student(f, sid).get("focus_state") not in (None, "UNKNOWN"))
+    ok = bool(short) and not false_alerts and measured >= 0.5 * len(fr)
+    return {"status": "PASS" if ok else ("INCONCLUSIVE" if not short else "FAIL"),
+            "blinks_measured": len(short), "blink_durations_s": [round(b - a + frame_dt, 2) for a, b in short],
+            "drowsy_episodes": len(eps), "false_drowsy_alerts": len(false_alerts),
+            "sustained_closures_s": [round(b - a + frame_dt, 2) for a, b in long_],
+            "note": ("sustained eye closures were flagged as designed" if long_ else None)}
+
+
 def verdict_no_episode(log, step, kind, sid=STUDENT_A):
     fr = _frames(log, step)
     if not fr:
@@ -236,7 +282,7 @@ def verdict_end(log):
 def compute_verdicts(log):
     return {
         "1_single_identity": verdict_identity(log),
-        "2_blink": verdict_no_episode(log, "S2", "DROWSY"),
+        "2_blink": verdict_blink(log),
         "3_quick_glance": verdict_no_episode(log, "S3", "HEAD_AWAY"),
         "4_phone": verdict_phone(log),
         "5_leave_return": verdict_leave(log),

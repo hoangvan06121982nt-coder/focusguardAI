@@ -135,6 +135,9 @@ class ClassroomAI:
         self.last_debug = {
             "faces": len(faces), "persons": len(persons), "faces_associated": len(face_by_track),
             "phones": [round(c, 3) for _, c in phones],
+            "phone_boxes": [[round(v) for v in b] for b, _ in phones],
+            "person_boxes": {str(k): [round(v) for v in b] for k, b in persons.items()},
+            "frame_hw": [h, w],
             "phones_associated": {str(k): round(v, 3) for k, v in phone_by_track.items()},
         }
         decisions = self.identity.process_frame(
