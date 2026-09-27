@@ -117,11 +117,56 @@ def test_unenrolled_face_on_locked_track_releases_identity():
         t += 0.1
         d = mgr.process_frame([(5, noisy(gallery[2], 0.03, rng))], t)
     assert d[5].status == CONFIRMED and d[5].student_id == 2
-    for _ in range(30):                      # tracker id switch: a stranger now on track 5
+    for _ in range(70):                      # tracker id switch: a stranger stays on track 5 for 7 s
         t += 0.1
         d = mgr.process_frame([(5, noisy(stranger, 0.03, rng))], t)
     assert d[5].student_id is None
     assert mgr.track_for_student(2) is None
+
+
+def _partially_occluded(vec, rng, keep=0.25):
+    """Same person, face partly covered: similarity to the gallery drops to ~0.1-0.4."""
+    other = rng.normal(size=vec.shape)
+    other /= np.linalg.norm(other)
+    mixed = keep * vec + (1 - keep) * other
+    return mixed / np.linalg.norm(mixed)
+
+
+def test_phone_in_front_of_face_does_not_release_identity():
+    """Regression (real webcam): a phone held in front of the face dropped the
+    similarity from ~0.87 to 0.13-0.44 and the identity was released after 1 s,
+    discarding the phone evidence."""
+    gallery = random_gallery(4, seed=21)
+    mgr = IdentityManager(gallery)
+    rng = np.random.default_rng(3)
+    t = 0.0
+    for _ in range(20):
+        t += 0.1
+        mgr.process_frame([(1, noisy(gallery[3], 0.03, rng))], t)
+    sims = []
+    for _ in range(150):                     # 15 s of phone use, phone associated to the track
+        t += 0.1
+        emb = _partially_occluded(gallery[3], rng)
+        sims.append(float(mgr.match(emb).best_similarity))
+        d = mgr.process_frame([(1, emb, True)], t)
+        assert d[1].student_id == 3
+    assert sorted(sims)[len(sims) // 2] < 0.4   # the scenario really is mostly a non-match
+
+
+def test_brief_unflagged_occlusion_keeps_identity():
+    gallery = random_gallery(4, seed=22)
+    mgr = IdentityManager(gallery)
+    rng = np.random.default_rng(4)
+    t = 0.0
+    for _ in range(20):
+        t += 0.1
+        mgr.process_frame([(1, noisy(gallery[2], 0.03, rng))], t)
+    for _ in range(35):                      # hand over the face 3.5 s, no known occluder
+        t += 0.1
+        d = mgr.process_frame([(1, _partially_occluded(gallery[2], rng))], t)
+    assert d[1].student_id == 2
+    t += 0.1
+    assert mgr.process_frame([(1, noisy(gallery[2], 0.03, rng))], t)[1].student_id == 2
 
 
 def test_missing_face_does_not_release_locked_identity():

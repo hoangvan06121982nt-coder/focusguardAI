@@ -138,7 +138,8 @@ class ClassroomAI:
             "phones_associated": {str(k): round(v, 3) for k, v in phone_by_track.items()},
         }
         decisions = self.identity.process_frame(
-            [(tid, faces[face_by_track[tid]].embedding if tid in face_by_track else None) for tid in persons], now)
+            [(tid, faces[face_by_track[tid]].embedding if tid in face_by_track else None, tid in phone_by_track)
+             for tid in persons], now)
 
         observations = {}
         for tid, box in persons.items():
@@ -151,6 +152,8 @@ class ClassroomAI:
                 fw, fh = fx2 - fx1, fy2 - fy1
                 crop = frame[max(0, fy1 - fh // 4):min(h, fy2 + fh // 4), max(0, fx1 - fw // 4):min(w, fx2 + fw // 4)]
             ear, yaw, pitch = self._landmarks(tid, crop, now)
+            self.last_debug.setdefault("landmarks", {})[str(tid)] = [
+                None if v is None else round(float(v), 3) for v in (ear, yaw, pitch)]
             observations[d.student_id] = Observation(
                 timestamp=now, visible=True, face_visible=tid in face_by_track, ear=ear, yaw=yaw, pitch=pitch,
                 phone_confidence=phone_by_track.get(tid), identity_confidence=d.confidence, track_id=tid,

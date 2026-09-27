@@ -83,6 +83,7 @@ class TrackIdentity:
     candidate_since: Optional[float] = None
     contradict_count: int = 0
     contradict_since: Optional[float] = None
+    stranger_since: Optional[float] = None      # first clear non-match while locked
     conflict_with_track: Optional[int] = None
     first_seen: Optional[float] = None
     last_seen: Optional[float] = None
@@ -123,6 +124,7 @@ class IdentityManager:
         self._cooldown_until: Dict[int, float] = {}         # student_id -> ts
         self._recently_lost: Dict[int, float] = {}          # student_id -> lost ts
         self.events: List[IdentityEvent] = []
+        self._occluded: set = set()
         self.set_gallery(gallery or {})
 
     # ------------------------------------------------------------------ gallery
@@ -186,12 +188,21 @@ class IdentityManager:
                       now: float) -> Dict[int, TrackIdentity]:
         """Update identities for one frame.
 
-        ``observations`` is an iterable of ``(track_id, embedding_or_None)`` for
-        every track visible in this frame. Returns ``{track_id: TrackIdentity}``
+        ``observations`` is an iterable of ``(track_id, embedding_or_None)`` or
+        ``(track_id, embedding_or_None, occluded)`` for every track visible in
+        this frame. ``occluded`` marks a known occluder over the face (e.g. an
+        associated phone): the embedding is then unreliable and a non-match does
+        not count against a locked identity. Returns ``{track_id: TrackIdentity}``
         for those tracks. Tracks missing from the frame age out and eventually
         release their identity for recovery.
         """
-        obs = [(int(tid), emb) for tid, emb in observations]
+        obs, occluded = [], set()
+        for item in observations:
+            tid = int(item[0])
+            obs.append((tid, item[1]))
+            if len(item) > 2 and item[2]:
+                occluded.add(tid)
+        self._occluded = occluded
         matches = {tid: self.match(emb) for tid, emb in obs}
 
         # Locked tracks first so existing bindings are respected, then unlocked
@@ -231,31 +242,41 @@ class IdentityManager:
 
     def _observe_locked(self, t: TrackIdentity, m: MatchResult, now: float):
         accepted = m.accepted_id
-        clear_non_match = (m.outcome == NO_MATCH and
-                           m.best_similarity < self.config.similarity_threshold - self.config.min_margin)
-        if accepted is None and not clear_non_match:
-            # No face / ambiguous / borderline: keep the lock, not a contradiction.
-            return
         if accepted == t.student_id:
             t.contradict_count = 0
             t.contradict_since = None
+            t.stranger_since = None
             t.confidence = m.best_similarity
             t.margin = m.margin
             return
+        clear_non_match = (m.outcome == NO_MATCH and
+                           m.best_similarity < self.config.similarity_threshold - self.config.min_margin)
+        if accepted is None:
+            # No face / ambiguous / borderline / occluded face: keep the lock.
+            # A clear non-match only releases after stranger_unlock_seconds of
+            # no match at all (stranger on this track after an id switch).
+            if clear_non_match and t.track_id not in getattr(self, "_occluded", ()):
+                if t.stranger_since is None:
+                    t.stranger_since = now
+                if now - t.stranger_since >= self.config.stranger_unlock_seconds:
+                    self._release(t.track_id, reason="no_match", now=now)
+                    t.status = UNCERTAIN
+                    t.stranger_since = None
+                    t.candidate_id, t.candidate_count, t.candidate_since = None, 0, None
+            return
+        # Another ENROLLED student matches clearly on this track.
         if t.contradict_count == 0:
             t.contradict_since = now
         t.contradict_count += 1
         if (t.contradict_count >= self.config.unlock_consecutive
                 and now - (t.contradict_since or now) >= self.config.unlock_min_seconds):
-            # A clearly different face (another student, or someone not enrolled
-            # after a tracker id switch) must not keep this student's identity.
             released = t.student_id
             self._release(t.track_id, reason="contradicted", now=now)
             self._cooldown_until[released] = now + self.config.conflict_cooldown_seconds
             t.status = UNCERTAIN
             t.candidate_id = accepted
-            t.candidate_count = 1 if accepted is not None else 0
-            t.candidate_since = now if accepted is not None else None
+            t.candidate_count = 1
+            t.candidate_since = now
 
     def _observe_unlocked(self, t: TrackIdentity, m: MatchResult, now: float):
         accepted = m.accepted_id
@@ -324,6 +345,7 @@ class IdentityManager:
         t.margin = m.margin
         t.contradict_count = 0
         t.contradict_since = None
+        t.stranger_since = None
         t.confirmed_at = now
         t.candidate_id = None
         t.candidate_count = 0

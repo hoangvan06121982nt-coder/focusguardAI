@@ -305,6 +305,10 @@ def snapshot(cam, runtime, step, t, fps):
         students[str(sid)] = {k: v.get(k) for k in ("identity_status", "identity_confidence", "active_track_id",
                                                       "attendance_status", "visibility_status", "connection_status",
                                                       "focus_state", "focus_score", "event_counts", "away_count")}
+        an = runtime.analyzers.get(sid)
+        if an is not None:
+            students[str(sid)]["ear_baseline"] = an.ear_baseline
+            students[str(sid)]["ear_closed_threshold"] = an.ear_closed_threshold
     return {"t": t, "step": step, "fps": round(fps, 1), "camera_status": runtime.camera_status,
             "tracks": tracks, "students": students, "detector": dict(getattr(cam, "last_debug", {}) or {})}
 

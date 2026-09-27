@@ -11,6 +11,7 @@ outcome is the same at 5, 15 or 30 FPS:
 The analyzer never touches the focus score. It only reports the current
 dominant behaviour and emits :class:`BehaviorEpisode` start/end transitions.
 """
+from collections import deque
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
@@ -121,13 +122,45 @@ class BehaviorAnalyzer:
         self._away_episode: Optional[BehaviorEpisode] = None
         self.focus_state = rs.FOCUS_UNKNOWN
         self.visibility_status = rs.VIS_NOT_SEEN
+        self._ear_hist = deque()                 # (timestamp, ear) of open-eye samples
+        self.ear_baseline: Optional[float] = None
+        self.ear_closed_threshold: Optional[float] = None
 
     # ---------------------------------------------------------------- signals
+    def _eyes_closed(self, obs: Observation) -> bool:
+        """Eye closure relative to THIS student's own open-eye EAR.
+
+        Until enough open-eye samples exist the eyes count as "not measured"
+        (never as closed), so a student whose normal EAR is low is not flagged
+        drowsy during warm-up. Samples taken while the eyes look closed are not
+        added to the baseline, so a long closure cannot drag it down.
+        """
+        c = self.config
+        if obs.ear is None:
+            return False
+        hist = self._ear_hist
+        while hist and obs.timestamp - hist[0][0] > c.ear_baseline_window_seconds:
+            hist.popleft()
+        closed = False
+        ready = (len(hist) >= c.ear_baseline_min_samples
+                 and hist[-1][0] - hist[0][0] >= c.ear_baseline_min_seconds)
+        if ready:
+            vals = sorted(e for _, e in hist)
+            self.ear_baseline = vals[int(c.ear_baseline_percentile * (len(vals) - 1))]
+            self.ear_closed_threshold = min(c.ear_threshold, c.ear_closed_ratio * self.ear_baseline)
+        if self.ear_closed_threshold is not None:
+            # Keep the last baseline when recent open-eye samples aged out
+            # (e.g. eyes closed longer than the window).
+            closed = obs.ear < self.ear_closed_threshold
+        if not closed:
+            hist.append((obs.timestamp, obs.ear))
+        return closed
+
     def raw_signals(self, obs: Observation) -> Dict[str, Tuple[bool, Optional[float]]]:
         """Threshold raw measurements. Returns ``{kind: (on, confidence)}``."""
         c = self.config
         phone_on = obs.phone_confidence is not None and obs.phone_confidence >= c.phone_min_confidence
-        eyes_closed = obs.ear is not None and obs.ear < c.ear_threshold
+        eyes_closed = self._eyes_closed(obs)
         head_away = False
         if obs.yaw is not None and abs(obs.yaw) > c.yaw_limit_deg:
             head_away = True

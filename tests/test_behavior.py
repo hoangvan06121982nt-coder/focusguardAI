@@ -96,3 +96,54 @@ def test_unmeasured_signals_are_not_negative_evidence():
     for i in range(100):
         u = an.update(Observation(timestamp=1_000.0 + i * 0.1, visible=True, ear=None, yaw=None, pitch=None))
     assert u.focus_state == rs.FOCUS_FOCUSED and u.started == []
+
+
+def _eyes(fps, duration, open_ear, closed=()):
+    """Observations with a person-specific open-eye EAR and optional closures."""
+    out = []
+    for i in range(int(duration * fps)):
+        t = i / fps
+        ear = open_ear
+        for a, b, v in closed:
+            if a <= t < b:
+                ear = v
+        out.append(Observation(timestamp=1_000.0 + t, visible=True, face_visible=True, ear=ear, yaw=0.0, pitch=0.0))
+    return out
+
+
+def test_low_open_eye_ear_is_not_drowsy():
+    """Regression (real webcam): a student's open eyes measured below the old
+    fixed 0.22 threshold and produced drowsy episodes while blinking normally."""
+    an = BehaviorAnalyzer(1)
+    started = []
+    blinks = [(t, t + 0.2, 0.08) for t in (5, 9, 13, 17, 21, 25)]
+    for obs in _eyes(7.5, 30, 0.19, blinks):      # 7.5 FPS as measured on the real run
+        started += an.update(obs).started
+    assert [e.type for e in started] == []
+    assert an.ear_baseline == pytest.approx(0.19) and an.ear_closed_threshold < 0.19
+
+
+def test_low_open_eye_ear_still_detects_real_eye_closure():
+    an = BehaviorAnalyzer(1)
+    started = []
+    for obs in _eyes(7.5, 30, 0.19, [(10, 14, 0.07)]):
+        started += an.update(obs).started
+    assert [e.type for e in started] == [DROWSY]
+
+
+def test_long_closure_does_not_drag_baseline_down():
+    an = BehaviorAnalyzer(1)
+    kinds = []
+    for obs in _eyes(10, 120, 0.30, [(10, 110, 0.10)]):   # eyes closed 100 s
+        u = an.update(obs)
+        kinds.append(u.focus_state)
+    assert kinds[-120] == rs.FOCUS_DROWSY                    # still drowsy near the end of the closure
+    assert an.ear_baseline == pytest.approx(0.30)
+
+
+def test_no_drowsy_before_baseline_warm_up():
+    an = BehaviorAnalyzer(1)
+    started = []
+    for obs in _eyes(10, 1.5, 0.05):                        # eyes "closed" from the first frame
+        started += an.update(obs).started
+    assert started == []

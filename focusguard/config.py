@@ -45,6 +45,13 @@ class IdentityConfig:
     # Consecutive matches needed to re-bind a recently lost student to a new
     # track (tracker re-assigned an id after occlusion).
     recovery_consecutive: int = 2
+    # A locked track whose face clearly matches NOBODY enrolled (e.g. a stranger
+    # after a tracker id switch) is released only after this long without any
+    # match of the locked student. Longer than unlock_min_seconds because partial
+    # occlusion (hand, phone, looking down) also lowers similarity: on the real
+    # webcam a phone in front of the face dropped it from ~0.87 to 0.13-0.44 for
+    # several seconds.
+    stranger_unlock_seconds: float = 5.0
 
 
 @dataclass(frozen=True)
@@ -64,6 +71,16 @@ class BehaviorConfig:
     # Not visible for less than this is TEMPORARILY_NOT_VISIBLE,
     # longer is AWAY (left the seat).
     away_min_seconds: float = 10.0
+    # Eye-closure threshold adapts to each student's own open-eye EAR: closed
+    # means EAR < min(ear_threshold, ear_closed_ratio * baseline), where the
+    # baseline is a high percentile of that student's recent EAR. A fixed 0.22
+    # produced drowsy episodes for a real student with open eyes (EAR of open
+    # eyes depends on the person and the camera angle).
+    ear_closed_ratio: float = 0.75
+    ear_baseline_percentile: float = 0.8
+    ear_baseline_window_seconds: float = 60.0
+    ear_baseline_min_seconds: float = 2.0
+    ear_baseline_min_samples: int = 10
     # Minimum detector confidence for a phone box to count.
     phone_min_confidence: float = 0.35
     # Fraction of the phone box that must lie inside the person's box.
