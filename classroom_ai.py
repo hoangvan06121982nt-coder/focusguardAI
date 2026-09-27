@@ -67,6 +67,7 @@ class ClassroomAI:
         self.names = {}
         self.reload_gallery()
         self._landmark_cache = {}   # track_id -> (timestamp, ear, yaw, pitch)
+        self.last_debug = {}
 
     def reload_gallery(self):
         rows = self.session_manager.repo.get_student_embeddings_by_class(self.class_id)
@@ -130,6 +131,12 @@ class ClassroomAI:
         face_boxes = [tuple(map(float, f.bbox)) for f in faces]
         face_by_track = associate_faces(persons, face_boxes)
 
+        # Raw detector numbers for verification logs (no images).
+        self.last_debug = {
+            "faces": len(faces), "persons": len(persons), "faces_associated": len(face_by_track),
+            "phones": [round(c, 3) for _, c in phones],
+            "phones_associated": {str(k): round(v, 3) for k, v in phone_by_track.items()},
+        }
         decisions = self.identity.process_frame(
             [(tid, faces[face_by_track[tid]].embedding if tid in face_by_track else None) for tid in persons], now)
 

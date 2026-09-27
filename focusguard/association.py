@@ -40,8 +40,16 @@ def center(b: Box) -> Tuple[float, float]:
 
 
 def associate_faces(persons: Dict[int, Box], faces: List[Box],
-                    head_fraction: float = 0.5) -> Dict[int, int]:
-    """Return ``{track_id: face_index}`` with each face used at most once."""
+                    head_fraction: float = 0.85) -> Dict[int, int]:
+    """Return ``{track_id: face_index}`` with each face used at most once.
+
+    A face is a candidate for a person when its centre lies inside the top
+    ``head_fraction`` of the person box. 0.85 (not 0.5) because a laptop webcam
+    frames a student from very close: the person box is little more than head
+    and shoulders and the face centre sits around the middle of it. Global
+    greedy matching by distance to each person's head point keeps the
+    assignment one-to-one in crowded classroom frames.
+    """
     candidates = []
     for tid, p in persons.items():
         head_x = (p[0] + p[2]) / 2.0

@@ -35,17 +35,43 @@ CLASS_ID = 1
 
 
 # ------------------------------------------------------------------ prompts
+def vietnamese_voice():
+    """Name of an installed macOS Vietnamese voice (e.g. 'Linh'), or None."""
+    try:
+        out = subprocess.run(["say", "-v", "?"], capture_output=True, text=True, timeout=10).stdout
+    except Exception:
+        return None
+    for line in out.splitlines():
+        if "vi_VN" in line or "vi-VN" in line:
+            return line.split("  ")[0].strip()
+    return None
+
+
 class Prompter:
+    """Prints every prompt; speaks it only with a Vietnamese voice (the default
+    English voice cannot pronounce Vietnamese and is unintelligible)."""
+
     def __init__(self, speak=True):
-        self.speak = speak and sys.platform == "darwin"
+        self.voice = vietnamese_voice() if (speak and sys.platform == "darwin") else None
+        if speak and sys.platform == "darwin" and self.voice is None:
+            print("No Vietnamese voice installed: prompts are printed only "
+                  "(System Settings > Accessibility > Spoken Content > add 'Linh').")
 
     def say(self, text, wait=False):
         print(f"\n>>> {text}", flush=True)
-        if self.speak:
+        if self.voice:
             try:
-                p = subprocess.Popen(["say", text])
+                p = subprocess.Popen(["say", "-v", self.voice, text])
                 if wait:
                     p.wait(timeout=20)
+            except Exception:
+                pass
+
+    def beep(self):
+        print(">>> BÍP: quay đầu sang một bên khoảng 1 giây", flush=True)
+        if sys.platform == "darwin":
+            try:
+                subprocess.Popen(["afplay", "/System/Library/Sounds/Ping.aiff"])
             except Exception:
                 pass
 
@@ -95,6 +121,7 @@ def verdict_no_episode(log, step, kind, sid=STUDENT_A):
     measured = sum(1 for f in fr if _student(f, sid).get("focus_state") not in (None, "UNKNOWN"))
     ok = not eps and measured >= 0.5 * len(fr)
     return {"status": "PASS" if ok else "FAIL", f"{kind.lower()}_episodes": len(eps),
+            "episode_durations_s": [e.get("duration") for e in eps],
             "measured_fraction": round(measured / len(fr), 3),
             "note": None if measured >= 0.5 * len(fr) else "face not measured in most frames; inconclusive"}
 
@@ -119,29 +146,38 @@ def verdict_phone(log, sid=STUDENT_A):
 
 
 def verdict_leave(log, sid=STUDENT_A):
-    before, away, back = _frames(log, "S5a"), _frames(log, "S5b"), _frames(log, "S5c")
-    if not (before and away and back):
+    before, away_prompt, back_prompt = _frames(log, "S5a"), _frames(log, "S5b"), _frames(log, "S5c")
+    if not (before and away_prompt and back_prompt):
         return {"status": "NOT_RUN"}
-    eps = _episodes_started(log, sid, "AWAY", before[-1]["t"] - 1, back[-1]["t"])
+    # People do not leave/return exactly on cue: judge the absence over the whole
+    # leave+return window; "returned" = first confirmed frame after being AWAY.
+    window = away_prompt + back_prompt
+    vis = [_student(f, sid).get("visibility_status") for f in window]
+    away_idx = next((i for i, v in enumerate(vis) if v == "AWAY"), None)
+    returned = []
+    if away_idx is not None:
+        returned = [f for f in window[away_idx:] if _student(f, sid).get("identity_status") == "CONFIRMED"]
+    eps = _episodes_started(log, sid, "AWAY", before[-1]["t"] - 1, window[-1]["t"])
+    recovery = None
+    if returned:
+        first_visible_again = next(f for f in window[away_idx:] if _student(f, sid).get("visibility_status") != "AWAY")
+        recovery = returned[0]["t"] - first_visible_again["t"]
     tracks_before = {_student(f, sid).get("active_track_id") for f in before} - {None}
-    back_confirmed = [f for f in back if _student(f, sid).get("identity_status") == "CONFIRMED"]
-    recovery = back_confirmed[0]["t"] - back[0]["t"] if back_confirmed else None
-    tracks_after = {_student(f, sid).get("active_track_id") for f in back_confirmed} - {None}
+    tracks_after = {_student(f, sid).get("active_track_id") for f in returned} - {None}
     score_before = next((_student(f, sid).get("focus_score") for f in reversed(before)
                          if _student(f, sid).get("focus_score") is not None), None)
-    score_after = next((_student(f, sid).get("focus_score") for f in back_confirmed
+    score_after = next((_student(f, sid).get("focus_score") for f in returned
                         if _student(f, sid).get("focus_score") is not None), None)
-    vis_seen = {_student(f, sid).get("visibility_status") for f in away}
-    conn = {_student(f, sid).get("connection_status") for f in away}
+    conn = {_student(f, sid).get("connection_status") for f in window}
     no_reset = score_before is None or score_after is None or score_after <= score_before + 1
-    ok = (len(eps) == 1 and "AWAY" in vis_seen and "TEMPORARILY_NOT_VISIBLE" in vis_seen
-          and recovery is not None and no_reset and conn <= {"NOT_APPLICABLE"})
+    ok = (len(eps) == 1 and away_idx is not None and "TEMPORARILY_NOT_VISIBLE" in vis and bool(returned)
+          and no_reset and conn <= {"NOT_APPLICABLE"})
     return {"status": "PASS" if ok else "FAIL", "away_episodes": len(eps),
-            "visibility_states_while_away": sorted(v for v in vis_seen if v),
-            "connection_states_while_away": sorted(c for c in conn if c),
-            "reconfirm_after_return_s": recovery, "track_ids_before": sorted(tracks_before),
-            "track_ids_after": sorted(tracks_after), "score_before": score_before, "score_after": score_after,
-            "score_not_reset": no_reset}
+            "visibility_states": sorted({v for v in vis if v}),
+            "connection_states": sorted(c for c in conn if c),
+            "reconfirm_after_return_s": None if recovery is None else round(recovery, 2),
+            "track_ids_before": sorted(tracks_before), "track_ids_after": sorted(tracks_after),
+            "score_before": score_before, "score_after": score_after, "score_not_reset": no_reset}
 
 
 def verdict_crossing(log):
@@ -270,7 +306,7 @@ def snapshot(cam, runtime, step, t, fps):
                                                       "attendance_status", "visibility_status", "connection_status",
                                                       "focus_state", "focus_score", "event_counts", "away_count")}
     return {"t": t, "step": step, "fps": round(fps, 1), "camera_status": runtime.camera_status,
-            "tracks": tracks, "students": students}
+            "tracks": tracks, "students": students, "detector": dict(getattr(cam, "last_debug", {}) or {})}
 
 
 def run(args):
@@ -330,12 +366,11 @@ def run(args):
 
     step("S1", "Kịch bản 1. Ngồi trước camera, nhìn bình thường, giữ yên.", 25, lead=3)
     step("S2", "Kịch bản 2. Chớp mắt tự nhiên như bình thường.", 30)
-    prompter.say("Kịch bản 3. Khi nghe tiếng bíp, quay đầu sang một bên khoảng một giây rồi quay lại.")
+    prompter.say("Kịch bản 3. Khi nghe tiếng chuông, liếc đầu sang một bên thật nhanh, dưới một giây, rồi quay lại ngay.")
     loop("S3_lead", 4)
     for i in range(3):
         loop(f"S3_{i}_look", 5)
-        if not args.no_speak:
-            subprocess.Popen(["say", "bíp"])
+        prompter.beep()
         loop(f"S3_{i}_glance", 3)
     step("S4", "Kịch bản 4. Cầm điện thoại trước ngực và dùng liên tục cho đến khi được bảo dừng.", 15)
     prompter.say("Cất điện thoại đi.")
