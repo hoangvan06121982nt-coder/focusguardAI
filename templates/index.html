@@ -84,7 +84,7 @@
                 <div class="ai-protection">
                     <i class="fa-solid fa-shield text-success"></i>
                     <div>
-                        <h6>Bảo vệ bởi AI <span class="badge bg-success-subtle text-success border-success">Bật</span></h6>
+                        <h6>Giám sát bằng camera</h6>
                         <small>Đang tiến hành giám sát</small>
                     </div>
                 </div>
@@ -99,7 +99,7 @@
                     <button class="menu-toggle d-md-none"><i class="fa-solid fa-bars"></i></button>
                     <div class="welcome-msg">
                         <h4 class="mb-0">Chào mừng trở lại, {{ session.get('display_name', 'Học sinh') }}! 👋</h4>
-                        <p class="text-muted mb-0 small">FocusGuard AI đang giám sát phiên học của bạn</p>
+                        <p class="text-muted mb-0 small">FocusGuard theo dõi phiên học bằng camera của bạn</p>
                     </div>
                 </div>
                 <div class="topbar-right">
@@ -165,7 +165,7 @@
                                                 <i class="fa-solid fa-shield-halved" id="anti-cheating-icon"></i>
                                             </div>
                                             <div>
-                                                <h5 class="mb-1 fw-bold anti-cheating-title" style="font-size: 1.1rem;">Bảo vệ Chống Gian lận AI</h5>
+                                                <h5 class="mb-1 fw-bold anti-cheating-title" style="font-size: 1.1rem;">Giám sát phiên học</h5>
                                                 <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-30 px-3 py-2 fw-bold" id="anti-cheating-status-badge" style="font-size: 0.78rem;">
                                                     🔴 Bảo vệ đã Tắt
                                                 </span>
@@ -182,7 +182,7 @@
                                         </div>
                                         <!-- AI Security Analysis -->
                                         <div class="p-3 rounded-3 mt-2" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05);">
-                                            <div class="anti-cheating-text-secondary small fw-bold mb-1"><i class="fa-solid fa-microchip me-1 text-primary"></i>Phân tích Bảo mật AI</div>
+                                            <div class="anti-cheating-text-secondary small fw-bold mb-1"><i class="fa-solid fa-circle-info me-1 text-primary"></i>Ghi chú</div>
                                             <div class="text-muted small" id="anti-cheating-analysis" style="font-size: 0.78rem;">Đang quan sát hành vi học tập ổn định.</div>
                                         </div>
                                     </div>
@@ -192,10 +192,9 @@
                                         <h6 class="anti-cheating-header fw-bold mb-3 small" style="letter-spacing: 0.5px; text-transform: uppercase;">Tính năng Giám sát:</h6>
                                         <ul class="list-unstyled mb-0 d-flex flex-column gap-2 anti-cheating-text-secondary" style="font-size: 0.88rem;">
                                             <li class="d-flex align-items-center gap-2"><i class="fa-solid fa-circle-check text-muted" id="chk-phone-det" style="font-size: 0.95rem;"></i> Phát hiện Điện thoại</li>
-                                            <li class="d-flex align-items-center gap-2"><i class="fa-solid fa-circle-check text-muted" id="chk-tab-det" style="font-size: 0.95rem;"></i> Phát hiện Chuyển Tab</li>
+                                            <li class="d-flex align-items-center gap-2"><i class="fa-solid fa-circle-check text-muted" id="chk-tab-det" style="font-size: 0.95rem;"></i> Chuyển tab (trình duyệt tự báo)</li>
                                             <li class="d-flex align-items-center gap-2"><i class="fa-solid fa-circle-check text-muted" id="chk-cam-det" style="font-size: 0.95rem;"></i> Phát hiện Mất Camera</li>
-                                            <li class="d-flex align-items-center gap-2"><i class="fa-solid fa-circle-check text-muted" id="chk-multi-det" style="font-size: 0.95rem;"></i> Phát hiện Nhiều Người</li>
-                                            <li class="d-flex align-items-center gap-2"><i class="fa-solid fa-circle-check text-muted" id="chk-away-det" style="font-size: 0.95rem;"></i> Phát hiện Rời Màn hình</li>
+                                                                                        <li class="d-flex align-items-center gap-2"><i class="fa-solid fa-circle-check text-muted" id="chk-away-det" style="font-size: 0.95rem;"></i> Rời khung hình kéo dài</li>
                                         </ul>
                                     </div>
 
@@ -203,34 +202,19 @@
                                     <div class="col-lg-4 col-md-6 col-sm-12 border-start-lg">
                                         <div class="d-flex flex-column gap-3">
                                             <div class="d-flex justify-content-between align-items-center">
-                                                <span class="anti-cheating-text-secondary small">Điểm Bảo mật Trực tiếp:</span>
-                                                <strong class="text-success fs-5" id="security-score">100/100</strong>
+                                                <span class="anti-cheating-text-secondary small">Chuyển tab (trình duyệt báo):</span>
+                                                <strong class="text-warning fs-5" id="security-score">0</strong>
                                             </div>
                                             <div class="d-flex justify-content-between align-items-center">
-                                                <span class="anti-cheating-text-secondary small">Số Lỗi Vi phạm Phiên:</span>
+                                                <span class="anti-cheating-text-secondary small">Sự kiện hành vi (máy chủ):</span>
                                                 <strong class="text-danger fs-5" id="security-violations">0</strong>
                                             </div>
                                             <div class="d-flex justify-content-between align-items-center">
-                                                <span class="anti-cheating-text-secondary small">Sự kiện Bảo mật Cuối:</span>
-                                                <strong class="text-warning small text-end" id="security-last-event" style="max-width: 180px; word-break: break-word;">Không phát hiện vi phạm</strong>
+                                                <span class="anti-cheating-text-secondary small">Hành vi hiện tại:</span>
+                                                <strong class="text-warning small text-end" id="security-last-event" style="max-width: 180px; word-break: break-word;">—</strong>
                                             </div>
                                         </div>
                                     </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- AI Insight Card -->
-                    <div class="row g-4 mb-4" id="ai-insight-row" style="display: none;">
-                        <div class="col-12">
-                            <div class="custom-card p-3 d-flex align-items-center gap-3" style="background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, transparent 100%); border-left: 5px solid var(--primary-color);">
-                                <div class="p-2 bg-primary bg-opacity-10 text-primary rounded-3" style="font-size: 1.25rem;">
-                                    <i class="fa-solid fa-wand-magic-sparkles"></i>
-                                </div>
-                                <div class="flex-grow-1">
-                                    <div class="text-primary-light fw-bold" style="font-size: 0.75rem; letter-spacing: 0.5px; text-transform: uppercase;">Phân tích AI Tức thời</div>
-                                    <div class="mb-0 anti-cheating-title" id="ai-insight-text" style="font-size: 0.95rem; font-weight: 500;">Đang phân tích hành vi học tập...</div>
                                 </div>
                             </div>
                         </div>
@@ -369,93 +353,49 @@
                             </div>
                         </div>
                         
-                        <!-- Card 2: Current Emotion -->
+                        <!-- Card 2: Live runtime status (server-authoritative) -->
                         <div class="col-xl-3 col-md-6">
                             <div class="custom-card p-3 border-start border-info border-4 h-100">
                                 <div class="d-flex align-items-center text-info mb-2">
-                                    <i class="fa-solid fa-face-smile me-2"></i>
-                                    <h6 class="mb-0 fw-bold">Cảm xúc hiện tại</h6>
+                                    <i class="fa-solid fa-eye me-2"></i>
+                                    <h6 class="mb-0 fw-bold">Trạng thái hiện tại</h6>
                                 </div>
-                                
-                                <!-- Main Emotion Row -->
-                                <div class="d-flex align-items-center justify-content-between mb-2">
-                                    <div class="d-flex align-items-center gap-2">
-                                        <span class="fs-2" id="student-emotion-icon">😐</span>
-                                        <div>
-                                            <h5 class="fw-bold mb-0 text-white" id="student-emotion" style="font-size: 1rem;">Bình thường</h5>
-                                            <div class="text-white-50" style="font-size: 0.75rem;">
-                                                Độ tin cậy: <strong class="text-success" id="student-emotion-confidence">87%</strong>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="text-end">
-                                        <span class="badge bg-success-subtle text-success border border-success mb-1 d-block" id="emotion-stability-indicator" style="font-size: 0.65rem; padding: 2px 6px;">Ổn định</span>
-                                        <small class="text-muted d-block" style="font-size: 0.65rem;" id="emotion-stability-duration">Ổn định trong: 0s</small>
-                                    </div>
+                                <div style="font-size: 0.85rem;">
+                                    <div class="d-flex justify-content-between mb-1"><span class="text-muted">Hành vi:</span><strong id="live-focus-state">Không có dữ liệu</strong></div>
+                                    <div class="d-flex justify-content-between mb-1"><span class="text-muted">Khung hình:</span><strong id="live-visibility">Chưa thấy</strong></div>
+                                    <div class="d-flex justify-content-between mb-1"><span class="text-muted">Điểm danh:</span><strong id="live-attendance">—</strong></div>
+                                    <div class="d-flex justify-content-between"><span class="text-muted">Camera:</span><strong id="live-camera-status">—</strong></div>
                                 </div>
-
-                                <!-- Mini Chart & Trend sparkline -->
-                                <div class="border-top pt-2 mt-1" style="border-top: 1px solid rgba(255,255,255,0.05) !important;">
-                                    <div class="d-flex justify-content-between align-items-center mb-1">
-                                        <span class="text-muted" style="font-size: 0.68rem;"><i class="fa-solid fa-chart-line me-1"></i>Xu hướng: <span class="text-info fw-semibold" id="emotion-trend-sparkline">▁▂▂▃▃▃▃</span></span>
-                                        <span class="text-muted" style="font-size: 0.68rem;">10 cập nhật gần đây</span>
-                                    </div>
-                                    <div style="height: 35px; width: 100%; position: relative;">
-                                        <canvas id="emotion-mini-chart"></canvas>
-                                    </div>
-                                </div>
-
-                                <!-- Emotion History Timeline -->
-                                <div class="border-top pt-2 mt-1" style="border-top: 1px solid rgba(255,255,255,0.05) !important;">
-                                    <div class="d-flex align-items-center gap-1 w-100 flex-wrap" id="student-emotion-timeline" style="min-height: 20px;">
-                                        <!-- Emojis dynamically injected -->
-                                    </div>
-                                </div>
+                                <div class="text-muted border-top pt-1 mt-2" style="font-size: 0.68rem;">Hệ thống không nhận diện cảm xúc.</div>
                             </div>
                         </div>
 
-                        <!-- Card 3: Learning Risk Score -->
+                        <!-- Card 3: Behaviour events of this session (real counts) -->
                         <div class="col-xl-3 col-md-6">
                             <div class="custom-card p-3 border-start border-danger border-4 h-100">
                                 <div class="d-flex align-items-center text-danger mb-2">
                                     <i class="fa-solid fa-triangle-exclamation me-2"></i>
-                                    <h6 class="mb-0">Chỉ số rủi ro học tập</h6>
-                                    <i class="fa-solid fa-circle-question text-muted ms-auto" style="cursor: pointer;" title="Công thức rủi ro AI: 40% Dùng điện thoại + 30% Buồn ngủ + 20% Ngoảnh mặt đi + 10% Cảm xúc tiêu cực"></i>
+                                    <h6 class="mb-0">Sự kiện hành vi (phiên này)</h6>
                                 </div>
-                                <h3 class="fw-bold mb-1" id="learning-risk-score">0/100</h3>
-                                <div class="text-muted small">Điểm rủi ro học tập</div>
+                                <div style="font-size: 0.85rem;">
+                                    <div class="d-flex justify-content-between"><span>📱 Dùng điện thoại</span><strong id="evt-phone">0</strong></div>
+                                    <div class="d-flex justify-content-between"><span>😴 Buồn ngủ</span><strong id="evt-drowsy">0</strong></div>
+                                    <div class="d-flex justify-content-between"><span>↪ Quay đi chỗ khác</span><strong id="evt-head-away">0</strong></div>
+                                    <div class="d-flex justify-content-between"><span>🚶 Rời chỗ</span><strong id="evt-away">0</strong></div>
+                                </div>
                             </div>
                         </div>
 
-                        <!-- Card 4: Focus Prediction -->
+                        <!-- Card 4: Prediction is not shown until evaluated -->
                         <div class="col-xl-3 col-md-6">
                             <div class="custom-card p-3 border-start border-primary border-4 h-100">
                                 <div class="d-flex align-items-center text-primary mb-2">
                                     <i class="fa-solid fa-chart-line me-2"></i>
                                     <h6 class="mb-0 fw-bold">Dự báo tập trung</h6>
                                 </div>
-                                <div style="font-size: 0.85rem;">
-                                    <div class="d-flex justify-content-between align-items-center mb-1 pb-1 border-bottom border-light border-opacity-10">
-                                        <span class="text-muted">Tập trung hiện tại:</span>
-                                        <span class="fw-bold" id="pred-current-focus">100</span>
-                                    </div>
-                                    <div class="d-flex justify-content-between align-items-center mb-1">
-                                        <span class="text-primary-light fw-semibold">Dự báo tập trung (10 phút):</span>
-                                        <span class="fw-bold text-primary" id="prediction-focus-score">100</span>
-                                    </div>
-                                </div>
-                                <div class="text-white-50 border-top pt-1 mt-1" style="font-size: 0.7rem; line-height: 1.4;">
-                                    <div class="d-flex justify-content-between">
-                                        <span>😴 Nguy cơ buồn ngủ:</span>
-                                        <strong class="text-warning" id="pred-drowsy-risk">5%</strong>
-                                    </div>
-                                    <div class="d-flex justify-content-between">
-                                        <span>📱 Nguy cơ dùng ĐT:</span>
-                                        <strong class="text-warning" id="pred-phone-risk">5%</strong>
-                                    </div>
-                                </div>
-                                <div class="text-muted border-top pt-1 mt-1" style="font-size: 0.65rem; font-style: italic; line-height: 1.2;" id="prediction-explanation">
-                                    Dựa trên phân tích xu hướng chú ý.
+                                <div class="fw-bold text-muted">NOT_EVALUATED</div>
+                                <div class="text-muted mt-1" style="font-size: 0.72rem; line-height: 1.4;">
+                                    Chưa có mô hình dự báo được kiểm chứng trên dữ liệu thật, nên hệ thống không hiển thị số dự báo.
                                 </div>
                             </div>
                         </div>
@@ -479,26 +419,19 @@
                             </div>
                         </div>
 
-                        <!-- Right: AI Learning Risk Analysis -->
+                        <!-- Right: how the score is computed (rule-based, transparent) -->
                         <div class="col-xl-6 col-lg-12">
-                            <!-- AI Learning Risk Analysis Card -->
-                            <div class="custom-card p-4 h-100" style="background: linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, transparent 100%); height: 240px;">
+                            <div class="custom-card p-4 h-100" style="height: 240px;">
                                 <div class="d-flex justify-content-between align-items-center mb-3">
-                                    <h6 class="mb-0 fw-bold text-primary"><i class="fa-solid fa-brain me-2"></i>Phân tích Rủi ro Học tập AI</h6>
-                                    <span class="badge bg-success" id="risk-level-badge">Thấp</span>
+                                    <h6 class="mb-0 fw-bold text-primary"><i class="fa-solid fa-scale-balanced me-2"></i>Cách tính điểm tập trung</h6>
+                                    <span class="badge bg-secondary">Heuristic</span>
                                 </div>
-                                <div class="mb-3" style="font-size: 0.95rem;">
-                                    Rủi ro hiện tại: <strong class="fs-5 text-danger" id="risk-display-score">0/100</strong>
-                                </div>
-                                <div class="text-muted" style="font-size: 0.85rem;">
-                                    <div class="fw-semibold mb-2 text-white-50">Lý do phân tích chi tiết:</div>
-                                    <ul class="mb-0 ps-3" id="risk-reasons-list" style="line-height: 1.6;">
-                                        <li>0 sự kiện dùng điện thoại</li>
-                                        <li>0 sự kiện ngủ gật / buồn ngủ</li>
-                                        <li>0 sự kiện ngoảnh mặt đi</li>
-                                        <li>Xu hướng tập trung ổn định</li>
-                                    </ul>
-                                </div>
+                                <ul class="text-muted mb-0 ps-3" style="font-size: 0.85rem; line-height: 1.6;">
+                                    <li>Điểm thay đổi theo thời gian thực (mỗi giây), không phụ thuộc FPS.</li>
+                                    <li>Chỉ tính hành vi kéo dài: điện thoại ≥ 1s, nhắm mắt ≥ 1.5s, quay đầu ≥ 2s, rời chỗ ≥ 10s.</li>
+                                    <li>Chớp mắt, liếc nhanh, điện thoại lóe qua không bị tính.</li>
+                                    <li>Độ chính xác trên dữ liệu thực tế: <strong>NOT_EVALUATED</strong>.</li>
+                                </ul>
                             </div>
                         </div>
                     </div>
@@ -547,25 +480,25 @@
                     <div class="row g-3 mb-4">
                         <div class="col-xl-2 col-sm-4 col-6">
                             <div class="custom-card p-3 text-center border-start border-danger border-4 h-100 d-flex flex-column justify-content-center">
-                                <span class="text-muted small d-block mb-1">Mất tập trung</span>
+                                <span class="text-muted small d-block mb-1">Tổng sự kiện</span>
                                 <h3 class="fw-bold mb-0 text-danger" id="distraction-count">0</h3>
                             </div>
                         </div>
                         <div class="col-xl-2 col-sm-4 col-6">
                             <div class="custom-card p-3 text-center border-start border-warning border-4 h-100 d-flex flex-column justify-content-center">
-                                <span class="text-muted small d-block mb-1">Cảnh báo chú ý</span>
+                                <span class="text-muted small d-block mb-1">Quay đi chỗ khác</span>
                                 <h3 class="fw-bold mb-0 text-warning" id="warning-count">0</h3>
                             </div>
                         </div>
                         <div class="col-xl-2 col-sm-4 col-6">
                             <div class="custom-card p-3 text-center border-start border-primary border-4 h-100 d-flex flex-column justify-content-center">
-                                <span class="text-muted small d-block mb-1">Nhìn màn hình</span>
-                                <h3 class="fw-bold mb-0 text-primary" id="screen-attention-pct">100%</h3>
+                                <span class="text-muted small d-block mb-1">Trong khung hình</span>
+                                <h3 class="fw-bold mb-0 text-primary" id="screen-attention-pct">—</h3>
                             </div>
                         </div>
                         <div class="col-xl-2 col-sm-4 col-6">
                             <div class="custom-card p-3 text-center border-start border-secondary border-4 h-100 d-flex flex-column justify-content-center">
-                                <span class="text-muted small d-block mb-1">Rời vị trí</span>
+                                <span class="text-muted small d-block mb-1">Rời chỗ</span>
                                 <h3 class="fw-bold mb-0 text-secondary" id="seat-leaving-count">0 lần</h3>
                                 <small class="text-muted small d-block" id="seat-leaving-duration">Tổng: 0 phút</small>
                             </div>
@@ -574,10 +507,7 @@
                             <div class="custom-card p-3 h-100 d-flex flex-column justify-content-between">
                                 <span class="text-muted small mb-1 d-block">Buồn ngủ:</span>
                                 <div class="mt-auto">
-                                    <div class="progress mb-1" style="height: 6px;">
-                                        <div class="progress-bar bg-warning" id="pb-drowsy-risk" role="progressbar" style="width: 5%"></div>
-                                    </div>
-                                    <span class="small fw-semibold" id="val-drowsy-risk">5%</span>
+                                    <span class="fs-4 fw-bold" id="val-drowsy-risk">0 lần</span>
                                 </div>
                             </div>
                         </div>
@@ -585,10 +515,7 @@
                             <div class="custom-card p-3 h-100 d-flex flex-column justify-content-between">
                                 <span class="text-muted small mb-1 d-block">Dùng điện thoại:</span>
                                 <div class="mt-auto">
-                                    <div class="progress mb-1" style="height: 6px;">
-                                        <div class="progress-bar bg-danger" id="pb-phone-risk" role="progressbar" style="width: 5%"></div>
-                                    </div>
-                                    <span class="small fw-semibold" id="val-phone-risk">5%</span>
+                                    <span class="fs-4 fw-bold" id="val-phone-risk">0 lần</span>
                                 </div>
                             </div>
                         </div>
@@ -598,7 +525,7 @@
                     <div class="row g-4 mb-4">
                         <div class="col-lg-6">
                             <div class="custom-card p-4 h-100">
-                                <h6 class="fw-semibold mb-3"><i class="fa-solid fa-fire text-danger me-2"></i>Biểu đồ nhiệt tập trung (Hôm nay)</h6>
+                                <h6 class="fw-semibold mb-3"><i class="fa-solid fa-fire text-danger me-2"></i>Điểm tập trung theo khung giờ bắt đầu phiên</h6>
                                 <div class="d-flex flex-wrap gap-2 justify-content-center mt-2" id="student-heatmap-grid">
                                     <!-- Dynamic Heatmap Cells -->
                                 </div>
@@ -611,14 +538,14 @@
                         </div>
                         <div class="col-lg-6">
                             <div class="custom-card p-4 h-100">
-                                <h6 class="fw-semibold mb-3"><i class="fa-solid fa-trophy text-warning me-2"></i>Bảng xếp hạng thi đua trong ngày</h6>
+                                <h6 class="fw-semibold mb-3"><i class="fa-solid fa-calendar-check text-warning me-2"></i>Lịch sử buổi học của lớp</h6>
                                 <div class="table-responsive">
                                     <table class="table table-sm table-borderless align-middle mb-0 text-white">
                                         <thead>
                                             <tr class="text-muted small">
-                                                <th style="width: 50px;">Hạng</th>
-                                                <th>Học sinh</th>
-                                                <th class="text-end">Độ tập trung</th>
+                                                <th>Bắt đầu</th>
+                                                <th>Điểm danh</th>
+                                                <th class="text-end">Điểm TB</th>
                                             </tr>
                                         </thead>
                                         <tbody id="leaderboard-body">
@@ -646,7 +573,7 @@
                         <div class="col-lg-6">
                             <div class="custom-card p-4 h-100">
                                 <div class="d-flex justify-content-between align-items-center mb-3">
-                                    <h6 class="fw-semibold mb-0">Phân tích Cảnh báo</h6>
+                                    <h6 class="fw-semibold mb-0">Sự kiện hành vi theo thời gian</h6>
                                 </div>
                                 <div class="chart-wrapper">
                                     <canvas id="alertsChart"></canvas>
@@ -719,14 +646,14 @@
                                 </div>
                                 
                                 <div class="mb-4">
-                                    <h6 class="fw-semibold mb-3">Đánh giá của AI</h6>
+                                    <h6 class="fw-semibold mb-3">Nhận xét (theo quy tắc)</h6>
                                     <div class="p-3 rounded-3" id="report-ai-eval-box" style="background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.15);">
                                         <p class="mb-0" id="report-ai-evaluation">Hệ thống chưa ghi nhận dữ liệu phiên học nào trong lần học này. Vui lòng bắt đầu phiên học trước khi xem báo cáo đánh giá chi tiết.</p>
                                     </div>
                                 </div>
 
                                 <div class="mb-4" id="report-coach-section" style="display: none;">
-                                    <h6 class="fw-semibold mb-3"><i class="fa-solid fa-brain text-primary me-2"></i>AI Coach Cá Nhân & Đề Xuất Thói Quen</h6>
+                                    <h6 class="fw-semibold mb-3"><i class="fa-solid fa-lightbulb text-primary me-2"></i>Gợi ý khung giờ học (thống kê)</h6>
                                     <div class="p-3 bg-primary bg-opacity-10 rounded-3 mb-3 border-start border-primary border-4 text-primary-emphasis" id="report-coach-recommendation" style="font-size: 0.95rem; line-height: 1.6;">
                                         <!-- Will be populated dynamically -->
                                     </div>
@@ -741,19 +668,10 @@
                                         </div>
                                     </div>
                                     <div class="col-md-6">
-                                        <h6 class="fw-semibold mb-3"><i class="fa-solid fa-shield-heart text-primary me-2"></i>Chỉ số học tập AI</h6>
-                                        <div class="p-3 border rounded-3" style="background: var(--bg-main); border-color: var(--border-color) !important;">
-                                            <div class="d-flex justify-content-between mb-2">
-                                                <span>Chỉ số rủi ro học tập:</span>
-                                                <strong id="report-risk-score">0/100</strong>
-                                            </div>
-                                            <div class="progress mb-3" style="height: 8px;">
-                                                <div class="progress-bar bg-danger" id="report-risk-progress" role="progressbar" style="width: 0%"></div>
-                                            </div>
-                                            <div class="d-flex justify-content-between">
-                                                <span>Dự báo độ tập trung:</span>
-                                                <strong id="report-forecast-score">100/100</strong>
-                                            </div>
+                                        <h6 class="fw-semibold mb-3"><i class="fa-solid fa-shield-heart text-primary me-2"></i>Độ tin cậy của số liệu</h6>
+                                        <div class="p-3 border rounded-3" style="background: var(--bg-main); border-color: var(--border-color) !important; font-size: 0.85rem;">
+                                            <div>Nguồn: sự kiện và điểm được máy chủ ghi nhận trong phiên.</div>
+                                            <div>Đánh giá độ chính xác thực tế: <strong>NOT_EVALUATED</strong>.</div>
                                         </div>
                                     </div>
                                 </div>
@@ -804,8 +722,9 @@
                                     <select id="alert-filter" class="form-select form-select-sm w-auto rounded-pill px-3" style="background-color: var(--bg-card); color: var(--text-primary); border-color: var(--border-color);">
                                         <option value="all">Tất cả cảnh báo</option>
                                         <option value="Dùng điện thoại">Dùng điện thoại</option>
-                                        <option value="Buồn ngủ / Ngủ gật">Buồn ngủ / Ngủ gật</option>
-                                        <option value="Ngoảnh mặt đi">Ngoảnh mặt đi</option>
+                                        <option value="Buồn ngủ">Buồn ngủ</option>
+                                        <option value="Quay đi chỗ khác">Quay đi chỗ khác</option>
+                                        <option value="Rời chỗ">Rời chỗ</option>
                                     </select>
                                 </div>
                                 <div class="table-responsive">
@@ -856,14 +775,14 @@
                             <div class="custom-card p-5">
                                 <div class="border-bottom pb-4 mb-4">
                                     <h3 class="fw-bold mb-1"><i class="fa-solid fa-gear text-primary me-2"></i>CÀI ĐẶT HỆ THỐNG</h3>
-                                    <p class="text-muted small mb-0">Cấu hình tham số AI nhận diện và thông tin học tập cá nhân</p>
+                                    <p class="text-muted small mb-0">Ngưỡng nhận diện (chỉ quản trị viên được thay đổi) và thông tin cá nhân</p>
                                 </div>
 
                                 <!-- Form -->
                                 <form id="settings-form">
                                     <!-- Card 1: AI Calibration -->
                                     <div class="mb-5">
-                                        <h5 class="fw-semibold text-primary mb-4"><i class="fa-solid fa-brain me-2"></i>Cấu hình ngưỡng nhận diện AI</h5>
+                                        <h5 class="fw-semibold text-primary mb-4"><i class="fa-solid fa-sliders me-2"></i>Ngưỡng nhận diện hiện tại</h5>
                                         
                                         <div class="mb-4">
                                             <div class="d-flex justify-content-between mb-2">
@@ -930,7 +849,7 @@
                 </div>
 
                 <div class="footer-note text-center mt-4 text-muted small">
-                    <i class="fa-solid fa-shield-halved me-1"></i> FocusGuard AI sử dụng công nghệ AI tiên tiến để giúp bạn học tập tập trung và hiệu quả hơn. Mọi dữ liệu được xử lý an toàn và riêng tư. <i class="fa-solid fa-lock ms-2"></i>
+                    <i class="fa-solid fa-shield-halved me-1"></i> FocusGuard xử lý hình ảnh trên máy chủ, không lưu video; chỉ lưu sự kiện hành vi và điểm tập trung. <i class="fa-solid fa-lock ms-2"></i>
                 </div>
             </div>
         </main>
@@ -957,7 +876,7 @@
     <script>
         window.ACTIVE_TAB = "{{ active_tab }}";
         window.userRole = "{{ session.get('role', 'student') }}";
-        window.DISPLAY_NAME = "{{ session.get('display_name', 'Aarav Mehta') }}";
+        window.DISPLAY_NAME = "{{ session.get('display_name', '') }}";
     </script>
     <!-- Socket.IO Client -->
     <script src="{{ url_for('static', filename='js/socket.io.min.js') }}"></script>

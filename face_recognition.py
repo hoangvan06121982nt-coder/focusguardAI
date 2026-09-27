@@ -53,34 +53,18 @@ class FaceRecognizer:
             avg_embedding = avg_embedding / norm
         return avg_embedding.tolist()
         
-    def match_face(self, face_image, known_students, threshold=0.45):
+    def match_face(self, face_image, known_students, config=None):
+        """Single-image match (no temporal confirmation) for offline tools.
+
+        Uses the same threshold + margin rule as the live IdentityManager, so an
+        ambiguous face returns ``(None, similarity)`` instead of a guess.
         """
-        Compares the face image against list of known students.
-        known_students: list of dicts: [{'student_id': 1, 'full_name': '...', 'embedding': [...]}]
-        Returns (student_id, confidence_score) or (None, 0.0)
-        """
+        from focusguard.config import DEFAULT_CONFIG
+        from focusguard.identity import IdentityManager
         emb = self.extract_embedding(face_image)
         if emb is None:
             return None, 0.0
-            
-        emb = np.array(emb)
-        norm = np.linalg.norm(emb)
-        if norm > 0:
-            emb = emb / norm
-            
-        best_id = None
-        best_score = 0.0
-        
-        for s in known_students:
-            s_emb = np.array(s['embedding'])
-            s_norm = np.linalg.norm(s_emb)
-            if s_norm > 0:
-                s_emb = s_emb / s_norm
-                
-            # Cosine similarity is dot product of normalized vectors
-            sim = np.dot(emb, s_emb)
-            if sim > threshold and sim > best_score:
-                best_score = sim
-                best_id = s['student_id']
-                
-        return best_id, float(best_score)
+        manager = IdentityManager({s['student_id']: s['embedding'] for s in known_students},
+                                  config or DEFAULT_CONFIG.identity)
+        result = manager.match(emb)
+        return result.accepted_id, float(result.best_similarity)

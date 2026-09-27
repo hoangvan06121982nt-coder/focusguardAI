@@ -163,6 +163,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updateGauge(score) {
+        if (score === null || score === undefined) {
+            focusScoreEl.textContent = '--';
+            gaugePath.style.strokeDasharray = `0, 100`;
+            if (focusStatusText) {
+                focusStatusText.className = 'text-muted fw-bold mt-2 mb-0';
+                focusStatusText.textContent = 'Chưa có dữ liệu đo';
+            }
+            return;
+        }
         focusScoreEl.textContent = score;
         // The stroke-dasharray is "length, gap". A circle is approx 100 long in this viewBox.
         // If score is 80, length is 80, gap is 20.
@@ -393,11 +402,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (data.current_state !== lastLoggedState) {
                 if (data.current_state === 'BUON NGU') {
-                    addAlertRecord('Buồn ngủ / Ngủ gật');
+                    addAlertRecord('Buồn ngủ');
                 } else if (data.current_state === 'DUNG DIEN THOAI') {
                     addAlertRecord('Dùng điện thoại');
                 } else if (data.current_state === 'NGOANH MAT DI') {
-                    addAlertRecord('Ngoảnh mặt đi');
+                    addAlertRecord('Quay đi chỗ khác');
+                } else if (data.focus_state === 'AWAY') {
+                    addAlertRecord('Rời chỗ');
                 }
                 lastLoggedState = data.current_state;
             }
@@ -405,10 +416,11 @@ document.addEventListener('DOMContentLoaded', () => {
             // Update Distractions
             if (distractionCountEl) distractionCountEl.textContent = data.distractions;
             
-            // Update Screen Attention and Seat Leaving
+            // Time in frame (measured) and seat leaving (AWAY episodes)
             const screenAttentionPctEl = document.getElementById('screen-attention-pct');
             if (screenAttentionPctEl) {
-                screenAttentionPctEl.textContent = `${data.screen_attention_percent}%`;
+                const vs = data.visible_seconds || 0;
+                screenAttentionPctEl.textContent = `${Math.floor(vs / 60)}p ${vs % 60}s`;
             }
             const seatLeavingCountEl = document.getElementById('seat-leaving-count');
             if (seatLeavingCountEl) {
@@ -420,236 +432,37 @@ document.addEventListener('DOMContentLoaded', () => {
                 seatLeavingDurationEl.textContent = `Tổng: ${mins} phút`;
             }
 
-            // Update Emotion & Risks
-            const currentEmotion = data.current_emotion || 'Neutral';
-            const emotionVi = {"Happy": "Vui vẻ", "Neutral": "Bình thường", "Tired": "Mệt mỏi", "Stressed": "Căng thẳng"};
-            const emotionEl = document.getElementById('student-emotion');
-            if (emotionEl) emotionEl.textContent = emotionVi[currentEmotion] || currentEmotion;
-            
-            const emotionIconEl = document.getElementById('student-emotion-icon');
-            if (emotionIconEl && data.emotion_icon) emotionIconEl.textContent = data.emotion_icon;
-            
-            const emotionConfidenceEl = document.getElementById('student-emotion-confidence');
-            if (emotionConfidenceEl && data.emotion_confidence) {
-                emotionConfidenceEl.textContent = `${data.emotion_confidence}%`;
-            }
-            
-            // Stability & Duration Tracking
-            if (lastEmotionName === null) {
-                lastEmotionName = currentEmotion;
-                emotionChangeTime = Date.now();
-            } else if (currentEmotion !== lastEmotionName) {
-                lastEmotionName = currentEmotion;
-                emotionChangeTime = Date.now();
-            }
-            
-            const elapsedSecs = Math.round((Date.now() - emotionChangeTime) / 1000);
-            let stabilityText = '';
-            if (elapsedSecs < 60) {
-                stabilityText = `Ổn định trong: ${elapsedSecs}s`;
-            } else {
-                stabilityText = `Ổn định trong: ${Math.round(elapsedSecs / 60)} phút`;
-            }
-            const stabilityDurationEl = document.getElementById('emotion-stability-duration');
-            if (stabilityDurationEl) {
-                stabilityDurationEl.textContent = stabilityText;
-            }
-            
-            const history = data.emotion_history || [currentEmotion];
-            const lastThree = history.slice(-3);
-            const isStable = lastThree.length > 0 && lastThree.every(val => val === lastThree[0]);
-            const stabilityIndicator = document.getElementById('emotion-stability-indicator');
-            if (stabilityIndicator) {
-                stabilityIndicator.textContent = isStable ? 'Ổn định' : 'Biến động';
-                stabilityIndicator.className = isStable 
-                    ? 'badge bg-success-subtle text-success border border-success'
-                    : 'badge bg-warning-subtle text-warning border border-warning';
-            }
-            
-            const sparklineEl = document.getElementById('emotion-trend-sparkline');
-            if (sparklineEl) {
-                sparklineEl.textContent = getEmotionSparkline(history);
-            }
-            
-            renderEmotionMiniChart(history);
-            
-            const emotionTimelineEl = document.getElementById('student-emotion-timeline');
-            if (emotionTimelineEl && data.emotion_history) {
-                emotionTimelineEl.innerHTML = '';
-                const emotionIcons = {"Happy": "😊", "Neutral": "😐", "Tired": "😴", "Stressed": "😰"};
-                const emotionClasses = {
-                    "Happy": "bg-success bg-opacity-25 text-success border border-success border-opacity-50",
-                    "Neutral": "bg-info bg-opacity-25 text-info border border-info border-opacity-50",
-                    "Tired": "bg-warning bg-opacity-25 text-warning border border-warning border-opacity-50",
-                    "Stressed": "bg-danger bg-opacity-25 text-danger border border-danger border-opacity-50"
-                };
-                data.emotion_history.forEach(emo => {
-                    const span = document.createElement('span');
-                    span.className = `badge rounded-pill px-2 py-1 ${emotionClasses[emo] || 'bg-secondary bg-opacity-25 text-white border border-secondary border-opacity-50'}`;
-                    span.style.fontSize = '0.62rem';
-                    span.style.fontWeight = '500';
-                    const emoVi = emotionVi[emo] || emo;
-                    span.innerHTML = `${emotionIcons[emo] || '😐'} ${emoVi}`;
-                    emotionTimelineEl.appendChild(span);
-                });
-            }
-            
-            const learningRiskEl = document.getElementById('learning-risk-score');
-            if (learningRiskEl) {
-                let riskText = 'Thấp';
-                if (data.learning_risk_level === 'Medium') riskText = 'Trung bình';
-                else if (data.learning_risk_level === 'High') riskText = 'Cao';
-                learningRiskEl.textContent = `${data.learning_risk || 0}/100 (${riskText})`;
+            // Live runtime status (server-authoritative, no emotion / prediction)
+            const labels = data.labels || {};
+            const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+            setText('live-focus-state', labels.focus || 'Không có dữ liệu');
+            setText('live-visibility', labels.visibility || '—');
+            setText('live-attendance', labels.attendance || '—');
+            const camLabels = { ACTIVE: 'Đang nhận hình', NO_SIGNAL: 'Mất tín hiệu', WAITING: 'Đang chờ' };
+            setText('live-camera-status', camLabels[data.camera_status] || '—');
+            const ev = data.event_counts || {};
+            setText('evt-phone', ev.PHONE || 0);
+            setText('evt-drowsy', ev.DROWSY || 0);
+            setText('evt-head-away', ev.HEAD_AWAY || 0);
+            setText('evt-away', ev.AWAY || 0);
+            setText('val-drowsy-risk', `${ev.DROWSY || 0} lần`);
+            setText('val-phone-risk', `${ev.PHONE || 0} lần`);
+
+            // Session monitoring card: only real signals
+            const securityViolationsEl = document.getElementById('security-violations');
+            const securityScoreEl = document.getElementById('security-score');
+            const securityLastEventEl = document.getElementById('security-last-event');
+            const antiCheatingAnalysisEl = document.getElementById('anti-cheating-analysis');
+            if (securityViolationsEl) securityViolationsEl.textContent = data.distractions || 0;
+            if (securityScoreEl) securityScoreEl.textContent = tabSwitchCount;
+            if (securityLastEventEl) securityLastEventEl.textContent = labels.focus || '—';
+            if (antiCheatingAnalysisEl) {
+                antiCheatingAnalysisEl.textContent = data.camera_status === 'NO_SIGNAL'
+                    ? 'Camera không gửi hình: điểm tạm dừng, không bị trừ.'
+                    : 'Chỉ hành vi kéo dài mới được ghi nhận thành sự kiện.';
             }
 
-            const riskLevelBadge = document.getElementById('risk-level-badge');
-            const riskDisplayScore = document.getElementById('risk-display-score');
-            const riskReasonsList = document.getElementById('risk-reasons-list');
-
-            if (riskLevelBadge) {
-                let riskText = 'Thấp';
-                let badgeClass = 'badge bg-success';
-                if (data.learning_risk_level === 'Medium') {
-                    riskText = 'Trung bình';
-                    badgeClass = 'badge bg-warning text-dark';
-                } else if (data.learning_risk_level === 'High') {
-                    riskText = 'Cao';
-                    badgeClass = 'badge bg-danger';
-                }
-                riskLevelBadge.textContent = riskText;
-                riskLevelBadge.className = badgeClass;
-            }
-
-            if (riskDisplayScore) {
-                riskDisplayScore.textContent = `${data.learning_risk || 0}/100`;
-            }
-
-            if (riskReasonsList && data.learning_risk_reasons) {
-                riskReasonsList.innerHTML = '';
-                data.learning_risk_reasons.forEach(reason => {
-                    const li = document.createElement('li');
-                    li.textContent = reason;
-                    riskReasonsList.appendChild(li);
-                });
-            }
-            
-            const predFocusEl = document.getElementById('prediction-focus-score');
-            if (predFocusEl) predFocusEl.textContent = data.predicted_score !== undefined ? data.predicted_score : 100;
-
-            const predCurrentFocusEl = document.getElementById('pred-current-focus');
-            if (predCurrentFocusEl) predCurrentFocusEl.textContent = data.focus_score || 100;
-
-            const predDrowsyEl = document.getElementById('pred-drowsy-risk');
-            if (predDrowsyEl) predDrowsyEl.textContent = `${data.predicted_drowsy_risk || 5}%`;
-
-            const predPhoneEl = document.getElementById('pred-phone-risk');
-            if (predPhoneEl) predPhoneEl.textContent = `${data.predicted_phone_risk || 5}%`;
-
-            const predExplanationEl = document.getElementById('prediction-explanation');
-            if (predExplanationEl && data.prediction_explanation) {
-                predExplanationEl.textContent = data.prediction_explanation;
-            }
-
-            const valDrowsyRisk = document.getElementById('val-drowsy-risk');
-            const pbDrowsyRisk = document.getElementById('pb-drowsy-risk');
-            if (valDrowsyRisk) valDrowsyRisk.textContent = `${data.drowsiness_risk || 5}%`;
-            if (pbDrowsyRisk) pbDrowsyRisk.style.width = `${data.drowsiness_risk || 5}%`;
-
-            const valPhoneRisk = document.getElementById('val-phone-risk');
-            const pbPhoneRisk = document.getElementById('pb-phone-risk');
-            if (valPhoneRisk) valPhoneRisk.textContent = `${data.phone_risk || 5}%`;
-            if (pbPhoneRisk) pbPhoneRisk.style.width = `${data.phone_risk || 5}%`;
-
-            // Update AI Insight Card
-            const aiInsightRow = document.getElementById('ai-insight-row');
-            const aiInsightText = document.getElementById('ai-insight-text');
-            if (aiInsightRow && aiInsightText && data.ai_insight) {
-                aiInsightText.textContent = data.ai_insight;
-                aiInsightRow.style.display = 'block';
-            }
-
-            // Update Anti-Cheating Protection Dashboard
-            const antiCheatingSwitch = document.getElementById('switch-anti-cheating');
-            if (antiCheatingSwitch) {
-                const securityViolationsEl = document.getElementById('security-violations');
-                const securityScoreEl = document.getElementById('security-score');
-                const securityLastEventEl = document.getElementById('security-last-event');
-                const antiCheatingAnalysisEl = document.getElementById('anti-cheating-analysis');
-                
-                if (antiCheatingSwitch.checked) {
-                    const totalViolations = (data.distractions || 0) + tabSwitchCount;
-                    if (securityViolationsEl) securityViolationsEl.textContent = totalViolations;
-                    
-                    let scoreDeduction = tabSwitchCount * 20;
-                    if (data.phone_risk >= 70 || data.current_state === 'DUNG DIEN THOAI') {
-                        scoreDeduction += 20;
-                    }
-                    if (data.current_state === 'PHAT HIEN NHIEU NGUOI') {
-                        scoreDeduction += 15;
-                    }
-                    if (data.current_state === 'NGOANH MAT DI') {
-                        scoreDeduction += 10;
-                    }
-                    if (data.current_state === 'BUON NGU') {
-                        scoreDeduction += 10;
-                    }
-                    scoreDeduction += (data.distractions || 0) * 15;
-                    
-                    const scoreVal = Math.max(0, 100 - scoreDeduction);
-                    if (securityScoreEl) {
-                        securityScoreEl.textContent = `${scoreVal}/100`;
-                        if (scoreVal >= 80) {
-                            securityScoreEl.className = 'text-success fs-5';
-                        } else if (scoreVal >= 50) {
-                            securityScoreEl.className = 'text-warning fs-5';
-                        } else {
-                            securityScoreEl.className = 'text-danger fs-5';
-                        }
-                    }
-
-                    let lastEvent = "Không phát hiện vi phạm";
-                    let analysisText = "Đang quan sát hành vi học tập ổn định.";
-                    
-                    if (data.current_state === 'DUNG DIEN THOAI') {
-                        lastEvent = "⚠ Phát hiện điện thoại";
-                        analysisText = "Hành vi nghi vấn: Phát hiện điện thoại trong khung hình.";
-                    } else if (data.current_state === 'PHAT HIEN NHIEU NGUOI') {
-                        lastEvent = "⚠ Phát hiện nhiều người";
-                        analysisText = "Cảnh báo bảo mật: Phát hiện nhiều khuôn mặt.";
-                    } else if (data.current_state === 'NGOANH MAT DI') {
-                        lastEvent = "⚠ Rời mắt khỏi màn hình";
-                        analysisText = "Xao nhãng: Học sinh đang nhìn đi nơi khác.";
-                    } else if (data.current_state === 'KHONG THAY KHUON MAT') {
-                        lastEvent = "⚠ Mất luồng camera";
-                        analysisText = "Cảnh báo: Học sinh rời vị trí hoặc camera bị che khuất.";
-                    } else if (tabSwitchCount > 0) {
-                        lastEvent = "⚠ Đã chuyển tab trình duyệt";
-                        analysisText = "Vi phạm: Phát hiện sự kiện chuyển tab trình duyệt.";
-                    } else if (data.distractions > 0) {
-                        lastEvent = "⚠ Ghi nhận xao nhãng";
-                        analysisText = "Ghi nhận một sự kiện xao nhãng.";
-                    }
-                    
-                    if (securityLastEventEl) securityLastEventEl.textContent = lastEvent;
-                    if (antiCheatingAnalysisEl) antiCheatingAnalysisEl.textContent = analysisText;
-                } else {
-                    if (securityScoreEl) securityScoreEl.textContent = "100/100";
-                    if (securityViolationsEl) securityViolationsEl.textContent = "0";
-                    if (securityLastEventEl) securityLastEventEl.textContent = "Bảo vệ chưa kích hoạt";
-                    if (antiCheatingAnalysisEl) antiCheatingAnalysisEl.textContent = "Kích hoạt bảo vệ để bắt đầu giám sát.";
-                }
-            }
-
-            // Early Warning Notification Check
-            if (data.early_warning && !hasShownEarlyWarning) {
-                hasShownEarlyWarning = true;
-                showToastNotification("⚠ AI Cảnh báo sớm: Điểm tập trung của bạn đang giảm sút liên tục. Hãy tập trung học tập lại nhé!", "warning");
-            } else if (!data.early_warning) {
-                hasShownEarlyWarning = false;
-            }
-
-            // Fake warning count for now (distractions * 2 to simulate minor warnings)
-            if (warningCountEl) warningCountEl.textContent = Math.floor(data.distractions * 1.5);
+            if (warningCountEl) warningCountEl.textContent = ev.HEAD_AWAY || 0;
             
             // Update Notification Badge
             if (notificationBadge) {
@@ -682,8 +495,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const now = new Date();
                 addActivityLog('danger', 'Phát hiện hành vi xao nhãng.', now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
                 
-                // Update Alerts Chart data randomly for demo purposes based on real distractions
-                chartAlertsData.push({ time: now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}), dist: 1, warn: 2 });
+                // One bar per real behaviour event recorded by the server
+                chartAlertsData.push({ time: now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}), dist: 1, warn: 0 });
             }
             
             // Update Focus Chart
@@ -878,7 +691,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Update header timer & status
                 if (studyTimerEl) studyTimerEl.textContent = formatTime(secondsElapsed);
                 if (distractionCountEl) distractionCountEl.textContent = data.distractions;
-                if (warningCountEl) warningCountEl.textContent = Math.floor(data.distractions * 1.5);
+                if (warningCountEl) warningCountEl.textContent = (data.event_counts || {}).HEAD_AWAY || 0;
                 
                 // Set Topbar Status
                 if (topStatus) topStatus.textContent = 'Đang học';
@@ -935,7 +748,7 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 const res = await fetch('/api/student/session_comparison');
                 const data = await res.json();
-                const labels = data.map(d => d.start_time.substring(5, 16));
+                const labels = (Array.isArray(data) ? data : []).map(d => String(d.start_time || '').substring(5, 16));
                 const scores = data.map(d => d.score);
                 const ctx = compEl.getContext('2d');
                 if (sessionComparisonChartObj) sessionComparisonChartObj.destroy();
@@ -997,34 +810,25 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function loadDailyLeaderboard() {
+        // Students only see their OWN attendance for class sessions (missed ones included).
         const body = document.getElementById('leaderboard-body');
         if (!body) return;
         try {
-            const res = await fetch('/api/leaderboard');
+            const res = await fetch('/api/student/attendance_history');
             const data = await res.json();
-            if (!data || data.length === 0) {
-                body.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3"><small>Chưa có dữ liệu hôm nay.</small></td></tr>';
+            if (!Array.isArray(data) || data.length === 0) {
+                body.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3"><small>Chưa có buổi học lớp nào.</small></td></tr>';
                 return;
             }
-            let html = '';
-            data.forEach((item, index) => {
-                let medal = '';
-                if (index === 0) medal = '🥇';
-                else if (index === 1) medal = '🥈';
-                else if (index === 2) medal = '🥉';
-                else medal = `${index + 1}`;
-                
-                html += `
-                    <tr>
-                        <td><strong>${medal}</strong></td>
-                        <td><span class="fw-semibold">${item.display_name}</span></td>
-                        <td class="text-end fw-bold text-success">${item.score}%</td>
-                    </tr>
-                `;
-            });
-            body.innerHTML = html;
+            const labels = { PRESENT: 'Có mặt', LATE: 'Đi muộn', ABSENT: 'Vắng mặt' };
+            body.innerHTML = data.slice(0, 10).map(a => `
+                <tr>
+                    <td><small>${escapeHtml(a.started_at || '')}</small></td>
+                    <td><span class="${a.missed ? 'text-danger' : 'text-success'} fw-semibold">${labels[a.attendance_status] || a.attendance_status}</span></td>
+                    <td class="text-end fw-bold">${fmtScore(a.focus_score)}</td>
+                </tr>`).join('');
         } catch (e) {
-            console.error("Lỗi tải bảng xếp hạng:", e);
+            console.error("Lỗi tải lịch sử điểm danh:", e);
             body.innerHTML = '<tr><td colspan="3" class="text-center text-danger py-3"><small>Lỗi tải dữ liệu.</small></td></tr>';
         }
     }
@@ -1098,9 +902,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     } else if (profileData.trend === 'down') {
                         trendBadge.className = 'badge bg-danger-subtle text-danger d-flex align-items-center';
                         trendBadge.innerHTML = '<i class="fa-solid fa-arrow-trend-down me-1"></i>Sa sút';
-                    } else {
+                    } else if (profileData.trend === 'stable') {
                         trendBadge.className = 'badge bg-secondary-subtle text-secondary d-flex align-items-center';
                         trendBadge.innerHTML = '<i class="fa-solid fa-arrows-left-right me-1"></i>Ổn định';
+                    } else {
+                        trendBadge.className = 'badge bg-secondary-subtle text-secondary d-flex align-items-center';
+                        trendBadge.innerHTML = '<i class="fa-solid fa-circle-info me-1"></i>Không đủ dữ liệu';
                     }
                 }
             } catch (err) {
@@ -1128,36 +935,53 @@ document.addEventListener('DOMContentLoaded', () => {
                 return true;
             });
 
-            if (filteredSessions.length === 0) {
-                historyTableBody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">Chưa có dữ liệu phiên học nào trong chu kỳ này.</td></tr>';
-                statsTotalSessions.textContent = '0';
-                statsTotalTime.textContent = '00g 00p 00s';
-                statsAvgScore.textContent = '0/100';
-                return;
-            }
-
             let totalDuration = 0;
             let sumScores = 0;
+            let scored = 0;
 
             historyTableBody.innerHTML = '';
             filteredSessions.forEach(sess => {
-                totalDuration += sess.duration_seconds;
-                sumScores += sess.final_score;
-
+                const sc = (sess.avg_focus_score !== null && sess.avg_focus_score !== undefined) ? Math.round(sess.avg_focus_score) : sess.final_score;
+                totalDuration += sess.duration_seconds || 0;
+                if (sc !== null && sc !== undefined) { sumScores += sc; scored++; }
+                const badge = (sc === null || sc === undefined) ? '<span class="badge bg-secondary">N/A</span>'
+                    : `<span class="badge ${sc >= 85 ? 'bg-success' : sc >= 70 ? 'bg-warning' : 'bg-danger'}">${sc}/100</span>`;
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
-                    <td>${sess.start_time}</td>
-                    <td>${sess.end_time}</td>
-                    <td>${formatTime(sess.duration_seconds)}</td>
-                    <td><span class="badge ${sess.final_score >= 85 ? 'bg-success' : sess.final_score >= 70 ? 'bg-warning' : 'bg-danger'}">${sess.final_score}/100</span></td>
-                    <td class="text-danger fw-bold">${sess.total_distractions}</td>
+                    <td>${escapeHtml(sess.start_time)}</td>
+                    <td>${escapeHtml(sess.end_time || 'Đang diễn ra')}</td>
+                    <td>${formatTime(sess.duration_seconds || 0)}</td>
+                    <td>${badge}</td>
+                    <td class="text-danger fw-bold">${sess.total_distractions || 0}</td>
                 `;
                 historyTableBody.appendChild(tr);
             });
 
+            // Class sessions the student missed are listed too (never silently dropped).
+            try {
+                const attRes = await fetch('/api/student/attendance_history');
+                const att = await attRes.json();
+                (Array.isArray(att) ? att : []).filter(a => a.missed).forEach(a => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${escapeHtml(a.started_at)}</td>
+                        <td>${escapeHtml(a.ended_at || '')}</td>
+                        <td>—</td>
+                        <td><span class="badge bg-danger">Vắng mặt</span></td>
+                        <td>—</td>
+                    `;
+                    historyTableBody.appendChild(tr);
+                });
+            } catch (err) {
+                console.error("Lỗi tải lịch sử điểm danh:", err);
+            }
+
+            if (historyTableBody.children.length === 0) {
+                historyTableBody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">Chưa có dữ liệu phiên học nào trong chu kỳ này.</td></tr>';
+            }
             statsTotalSessions.textContent = filteredSessions.length;
             statsTotalTime.textContent = formatTime(totalDuration);
-            statsAvgScore.textContent = Math.round(sumScores / filteredSessions.length) + '/100';
+            statsAvgScore.textContent = scored ? Math.round(sumScores / scored) + '/100' : 'N/A';
 
         } catch (e) {
             console.error("Lỗi khi tải lịch sử:", e);
@@ -1182,8 +1006,9 @@ document.addEventListener('DOMContentLoaded', () => {
             status: 'Đã nhắc nhở'
         });
         
-        if (type.includes('ngủ') || type.toLowerCase().includes('sleep')) alertsHistory.sleep++;
-        else if (type.includes('thoại') || type.toLowerCase().includes('phone')) alertsHistory.phone++;
+        if (type.includes('ngủ')) alertsHistory.sleep++;
+        else if (type.includes('thoại')) alertsHistory.phone++;
+        else if (type.includes('Rời')) alertsHistory.away = (alertsHistory.away || 0) + 1;
         else alertsHistory.distraction++;
         
         localStorage.setItem('currentSessionAlerts', JSON.stringify(currentSessionAlerts));
@@ -1251,101 +1076,65 @@ document.addEventListener('DOMContentLoaded', () => {
     let reportDistractionsChartObj = null;
 
     async function renderReport(sessionId, durationSec, score, violations) {
-        if (reportDuration) reportDuration.textContent = formatTime(durationSec);
-        if (reportScore) reportScore.textContent = score + '/100';
-        if (reportDistractions) reportDistractions.textContent = violations;
-        
-        let evalText = "";
-        let bgStyle = "";
-        let borderStyle = "";
-        let textStyle = "";
-        
-        if (score >= 85) {
-            evalText = "<strong>Khuyên dùng từ AI:</strong> Bạn duy trì độ tập trung rất tốt (xuất sắc)! Hãy tiếp tục phát huy phương pháp này để đạt hiệu quả cao nhất trong học tập.";
-            bgStyle = "rgba(16, 185, 129, 0.08)";
-            borderStyle = "1px solid rgba(16, 185, 129, 0.15)";
-            textStyle = "#10b981";
+        const hasScore = score !== null && score !== undefined && !isNaN(score);
+        if (reportDuration) reportDuration.textContent = formatTime(durationSec || 0);
+        if (reportScore) reportScore.textContent = hasScore ? `${score}/100` : 'N/A';
+        if (reportDistractions) reportDistractions.textContent = violations || 0;
+
+        let evalText, color;
+        if (!hasScore) {
+            evalText = 'Không đủ dữ liệu: camera chưa đo được khuôn mặt trong phiên này.';
+            color = '#6366f1';
+        } else if (score >= 85) {
+            evalText = 'Điểm tập trung cao (≥ 85). Ít hành vi xao nhãng kéo dài được ghi nhận.';
+            color = '#10b981';
         } else if (score >= 70) {
-            evalText = "<strong>Khuyên dùng từ AI:</strong> Độ chú ý khá ổn định, tuy nhiên thỉnh thoảng bạn có dấu hiệu xao nhãng hoặc buồn ngủ nhẹ. Hãy thử áp dụng phương pháp quả cà chua Pomodoro (học 25p nghỉ 5p) để phục hồi năng lượng học tốt hơn.";
-            bgStyle = "rgba(245, 158, 11, 0.08)";
-            borderStyle = "1px solid rgba(245, 158, 11, 0.15)";
-            textStyle = "#f59e0b";
+            evalText = 'Điểm tập trung khá (70–84). Có một số hành vi xao nhãng kéo dài; nên nghỉ ngắn định kỳ.';
+            color = '#f59e0b';
         } else {
-            evalText = "<strong>Khuyên dùng từ AI:</strong> Cảnh báo! Độ tập trung của bạn đang ở mức thấp do buồn ngủ hoặc sử dụng điện thoại nhiều lần. Hãy để điện thoại xa tầm tay, đứng dậy uống nước hoặc rửa mặt để lấy lại sự tỉnh táo trước khi tiếp tục.";
-            bgStyle = "rgba(239, 68, 68, 0.08)";
-            borderStyle = "1px solid rgba(239, 68, 68, 0.15)";
-            textStyle = "#ef4444";
+            evalText = 'Điểm tập trung thấp (< 70). Xem biểu đồ bên dưới để biết loại hành vi được ghi nhận nhiều nhất.';
+            color = '#ef4444';
         }
-        
-        if (reportAiEvaluation) {
-            reportAiEvaluation.innerHTML = evalText;
-        }
+        if (reportAiEvaluation) reportAiEvaluation.textContent = evalText;
         if (reportAiEvalBox) {
-            reportAiEvalBox.style.background = bgStyle;
-            reportAiEvalBox.style.border = borderStyle;
-            reportAiEvalBox.style.color = textStyle;
+            reportAiEvalBox.style.background = 'rgba(99, 102, 241, 0.06)';
+            reportAiEvalBox.style.border = `1px solid ${color}33`;
+            reportAiEvalBox.style.color = color;
         }
-
-        const riskScoreEl = document.getElementById('report-risk-score');
-        const riskProgressEl = document.getElementById('report-risk-progress');
-        const forecastScoreEl = document.getElementById('report-forecast-score');
         const analysisRow = document.getElementById('report-analysis-row');
-
-        const riskScore = Math.max(0, Math.min(100, 100 - score + (violations * 5)));
-        const forecastScore = Math.max(20, Math.min(100, score - (violations * 2.5)));
-
-        if (riskScoreEl) riskScoreEl.textContent = `${riskScore}/100`;
-        if (riskProgressEl) riskProgressEl.style.width = `${riskScore}%`;
-        if (forecastScoreEl) forecastScoreEl.textContent = `${forecastScore}/100`;
         if (analysisRow) analysisRow.style.display = 'flex';
 
         const chartCanvas = document.getElementById('reportDistractionsChart');
-        if (chartCanvas) {
-            let chartData = [1, 1, 1];
-            if (sessionId) {
-                try {
-                    const breakdownRes = await fetch(`/api/session/${sessionId}/breakdown`);
-                    const breakdown = await breakdownRes.json();
-                    const phoneVal = breakdown.phone || 0;
-                    const drowsyVal = breakdown.drowsy || 0;
-                    const distractedVal = breakdown.distracted || 0;
-                    
-                    if (phoneVal > 0 || drowsyVal > 0 || distractedVal > 0) {
-                        chartData = [phoneVal, drowsyVal, distractedVal];
-                    }
-                } catch (e) {
-                    console.error("Lỗi tải breakdown:", e);
-                }
-            } else {
-                let phoneCount = alertsHistory.phone || 0;
-                let sleepCount = alertsHistory.sleep || 0;
-                let distractedCount = alertsHistory.distraction || 0;
-                if (phoneCount > 0 || sleepCount > 0 || distractedCount > 0) {
-                    chartData = [phoneCount, sleepCount, distractedCount];
-                }
+        if (!chartCanvas) return;
+        let counts = null;
+        if (sessionId) {
+            try {
+                const breakdownRes = await fetch(`/api/session/${sessionId}/breakdown`);
+                const breakdown = await breakdownRes.json();
+                if (breakdown && breakdown.counts) counts = breakdown.counts;
+            } catch (e) {
+                console.error("Lỗi tải breakdown:", e);
             }
-
-            const ctx = chartCanvas.getContext('2d');
-            if (reportDistractionsChartObj) reportDistractionsChartObj.destroy();
-            reportDistractionsChartObj = new Chart(ctx, {
-                type: 'doughnut',
-                data: {
-                    labels: ['Điện thoại', 'Buồn ngủ', 'Ngoảnh mặt'],
-                    datasets: [{
-                        data: chartData,
-                        backgroundColor: ['#ef4444', '#f59e0b', '#3b82f6'],
-                        borderWidth: 0
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { position: 'right', labels: { color: getChartColors().text } }
-                    }
-                }
-            });
+        } else {
+            counts = { PHONE: alertsHistory.phone || 0, DROWSY: alertsHistory.sleep || 0, HEAD_AWAY: alertsHistory.distraction || 0, AWAY: alertsHistory.away || 0 };
         }
+        counts = counts || { PHONE: 0, DROWSY: 0, HEAD_AWAY: 0, AWAY: 0 };
+        const chartData = [counts.PHONE || 0, counts.DROWSY || 0, counts.HEAD_AWAY || 0, counts.AWAY || 0];
+        const ctx = chartCanvas.getContext('2d');
+        if (reportDistractionsChartObj) reportDistractionsChartObj.destroy();
+        reportDistractionsChartObj = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: ['Điện thoại', 'Buồn ngủ', 'Quay đi', 'Rời chỗ'],
+                datasets: [{ data: chartData, backgroundColor: ['#ef4444', '#f59e0b', '#3b82f6', '#94a3b8'], borderWidth: 0 }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } },
+                plugins: { legend: { display: false } }
+            }
+        });
     }
 
     async function updateReportValues() {
@@ -1359,25 +1148,26 @@ document.addEventListener('DOMContentLoaded', () => {
             const coachSec = document.getElementById('report-coach-section');
             const coachRec = document.getElementById('report-coach-recommendation');
             if (coachSec && coachRec && recData && recData.text) {
-                coachRec.innerHTML = `<strong>Đề xuất AI Coach:</strong> ${recData.text}`;
+                coachRec.textContent = recData.text;
                 coachSec.style.display = 'block';
             }
         } catch (e) {
             console.error("Lỗi khi tải đề xuất AI Coach:", e);
         }
         
-        if (secondsElapsed > 0) {
-            renderReport(null, secondsElapsed, parseInt(focusScoreEl.textContent), parseInt(distractionCountEl.textContent));
+        if (secondsElapsed > 0 && isSessionActive) {
+            const liveScore = parseInt(focusScoreEl.textContent);
+            renderReport(null, secondsElapsed, isNaN(liveScore) ? null : liveScore, parseInt(distractionCountEl.textContent) || 0);
         } else {
             try {
                 const res = await fetch('/api/latest_session');
                 const data = await res.json();
                 if (data && data.status !== 'empty') {
                     reportDate.textContent = data.start_time;
-                    renderReport(data.id, data.duration_seconds, data.final_score, data.total_distractions);
+                    renderReport(data.id, data.duration_seconds, data.avg_focus_score !== null && data.avg_focus_score !== undefined ? Math.round(data.avg_focus_score) : data.final_score, data.total_distractions);
                 } else {
                     reportDuration.textContent = '00g 00p 00s';
-                    reportScore.textContent = '100/100';
+                    reportScore.textContent = 'N/A';
                     reportDistractions.textContent = '0';
                     reportAiEvaluation.innerHTML = 'Hệ thống chưa ghi nhận dữ liệu phiên học nào trong cơ sở dữ liệu. Vui lòng thực hiện phiên học đầu tiên.';
                     reportAiEvalBox.style.background = 'rgba(99, 102, 241, 0.08)';
@@ -1458,6 +1248,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 settingDistraction.value = data.distraction_threshold;
                 valDistraction.textContent = data.distraction_threshold + 's';
             }
+            // Thresholds are centralised on the server; only admins may change them.
+            [settingEar, settingDrowsy, settingDistraction].forEach(el => { if (el) el.disabled = !data.editable; });
             
             // Sound and Volume local
             const localSound = localStorage.getItem('alertSoundEnabled');
@@ -1661,6 +1453,27 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // --- Shared display helpers (server sends null when nothing was measured) ---
+    const STATE_LABELS_VI = {
+        Focused: 'Tập trung', Sleepy: 'Buồn ngủ', Distracted: 'Quay đi chỗ khác', Phone: 'Dùng điện thoại',
+        NotVisible: 'Tạm khuất', Away: 'Rời chỗ', Unknown: 'Chưa có dữ liệu'
+    };
+    const EVENT_LABELS_VI = { PHONE: 'Dùng điện thoại', DROWSY: 'Buồn ngủ', HEAD_AWAY: 'Quay đi chỗ khác', AWAY: 'Rời chỗ' };
+    function fmtScore(v) { return (v === null || v === undefined) ? '—' : `${v}%`; }
+    function scoreNum(v) { return (v === null || v === undefined) ? 0 : v; }
+    function fmtClock(t) {
+        if (t === null || t === undefined || t === '') return '—';
+        if (typeof t === 'number') return new Date(t * 1000).toLocaleTimeString('vi-VN', {hour: '2-digit', minute: '2-digit', second: '2-digit'});
+        return String(t);
+    }
+    function escapeHtml(v) {
+        return String(v === null || v === undefined ? '' : v).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+    }
+    function selectedClassId() {
+        const el = document.getElementById('select-class-monitor');
+        return el && el.value ? parseInt(el.value) : (window.userClassId ? parseInt(window.userClassId) : null);
+    }
+
     // --- Teacher & Admin Dashboards Implementation ---
     let teacherPollInterval;
     let selectedStudentName = null;
@@ -1768,7 +1581,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const classId = classSelect.value;
                 localStorage.setItem('selectedClassId', classId);
                 if (window.teacherSocketGlobal && window.teacherSocketGlobal.connected) {
-                    window.teacherSocketGlobal.emit('request_class_snapshot', {});
+                    window.teacherSocketGlobal.emit('request_class_snapshot', { class_id: selectedClassId() });
                 } else {
                     pollTeacherData();
                 }
@@ -1816,7 +1629,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Toggle start/end class session
         if (btnStartClass) {
             btnStartClass.addEventListener('click', async () => {
-                const res = await fetch('/api/teacher/start_class', { method: 'POST' });
+                const res = await fetch('/api/teacher/start_class', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ class_id: selectedClassId() }) });
                 const data = await res.json();
                 if (data.status === 'success') {
                     btnStartClass.style.display = 'none';
@@ -1832,7 +1645,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (btnEndClass) {
             btnEndClass.addEventListener('click', async () => {
-                const res = await fetch('/api/teacher/end_class', { method: 'POST' });
+                const res = await fetch('/api/teacher/end_class', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ class_id: selectedClassId() }) });
                 const data = await res.json();
                 if (data.status === 'success') {
                     btnEndClass.style.display = 'none';
@@ -1845,14 +1658,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     
                     // Fetch and show AI Class Summary modal
                     try {
-                        const summaryRes = await fetch('/api/teacher/class_summary');
+                        const summaryRes = await fetch(`/api/teacher/class_summary?class_id=${selectedClassId()}`);
                         const summaryData = await summaryRes.json();
-                        if (summaryData.status === 'success') {
+                        if (summaryData.status === 'success' || summaryData.status === 'insufficient_data') {
                             const avgEl = document.getElementById('summary-avg-score');
                             const dangerEl = document.getElementById('summary-danger-hour');
                             const textEl = document.getElementById('summary-text-content');
                             
-                            if (avgEl) avgEl.textContent = `${summaryData.average_score}/100`;
+                            if (avgEl) avgEl.textContent = summaryData.average_score === null || summaryData.average_score === undefined ? 'N/A' : `${summaryData.average_score}/100`;
                             if (dangerEl) dangerEl.textContent = summaryData.danger_hour || 'Chưa có';
                             if (textEl) textEl.textContent = summaryData.summary_text;
                             
@@ -1993,7 +1806,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         
                         // Set the video stream src if not set already
                         if (videoFeedImg && (!videoFeedImg.src || videoFeedImg.src.indexOf('/video_feed') === -1)) {
-                            videoFeedImg.src = '/video_feed';
+                            videoFeedImg.src = `/video_feed?mode=classroom&class_id=${selectedClassId()}`;
                         }
                     } else {
                         if (btnStartOffline) btnStartOffline.style.display = 'block';
@@ -2012,12 +1825,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     const statDrowsy = document.getElementById('offline-stat-drowsy');
                     const statFocus = document.getElementById('offline-stat-focus');
                     
-                    if (statPresent) statPresent.textContent = `${data.statistics.present}/28`;
+                    if (statPresent) statPresent.textContent = `${data.statistics.present}/${data.statistics.enrolled}`;
                     if (statDistracted) statDistracted.textContent = data.statistics.distracted;
                     if (statDrowsy) statDrowsy.textContent = data.statistics.drowsy;
                     if (statFocus) {
-                        statFocus.textContent = `${data.statistics.focus_score}%`;
-                        if (data.statistics.focus_score >= 80) statFocus.className = 'text-success fw-bold fs-5';
+                        statFocus.textContent = fmtScore(data.statistics.focus_score);
+                        if (data.statistics.focus_score === null) statFocus.className = 'text-muted fw-bold fs-5';
+                        else if (data.statistics.focus_score >= 80) statFocus.className = 'text-success fw-bold fs-5';
                         else if (data.statistics.focus_score >= 60) statFocus.className = 'text-warning fw-bold fs-5';
                         else statFocus.className = 'text-danger fw-bold fs-5';
                     }
@@ -2045,7 +1859,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const suggestionsContainer = document.getElementById('offline-suggestions-container');
                     if (suggestionsContainer) {
                         if (data.suggestions.length === 0) {
-                            suggestionsContainer.innerHTML = '<p class="text-muted mb-0">Chờ gợi ý giảng dạy từ AI...</p>';
+                            suggestionsContainer.innerHTML = '<p class="text-muted mb-0">Không có gợi ý tự động.</p>';
                         } else {
                             let html = '';
                             data.suggestions.forEach(val => {
@@ -2071,9 +1885,9 @@ document.addEventListener('DOMContentLoaded', () => {
                                 html += `
                                     <div class="activity-log-item mb-2" style="border-left: 4px solid ${log.type === 'warning' ? 'var(--warning-color)' : (log.type === 'danger' ? 'var(--danger-color)' : 'var(--primary-color)')}; padding: 8px 10px; border-radius: 6px; background: rgba(255,255,255,0.02); font-size: 0.78rem;">
                                         <div class="d-flex justify-content-between align-items-center">
-                                            <span class="text-white-50 small">${log.time}</span>
+                                            <span class="text-white-50 small">${fmtClock(log.time)}</span>
                                         </div>
-                                        <div class="text-white font-semibold mt-1">${log.message}</div>
+                                        <div class="text-white font-semibold mt-1">${escapeHtml(log.message)}</div>
                                     </div>
                                 `;
                             });
@@ -2107,8 +1921,8 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             
             sorted.forEach(s => {
-                const row = s.seat_row || 0;
-                const col = s.seat_col || 0;
+                const row = s.seat_row === null || s.seat_row === undefined ? 0 : s.seat_row;
+                const col = s.seat_col === null || s.seat_col === undefined ? 0 : s.seat_col;
                 const isOnline = s.online === true;
                 
                 // Color mapping based on student state
@@ -2121,7 +1935,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     color = '#9ca3af';
                     colorRgb = '156, 163, 175';
                     emoji = '⚪';
-                    stateText = 'Vắng mặt';
+                    stateText = (s.labels && s.labels.visibility) || 'Chưa thấy';
                 } else if (s.state === 'Sleepy') {
                     color = 'var(--warning-color)';
                     colorRgb = '245, 158, 11';
@@ -2226,7 +2040,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const btnStartOffline = document.getElementById('btn-start-offline-class');
         if (btnStartOffline) {
             btnStartOffline.addEventListener('click', async () => {
-                const res = await fetch('/api/teacher/start_offline_class', { method: 'POST' });
+                const res = await fetch('/api/teacher/start_offline_class', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ class_id: selectedClassId() }) });
                 const data = await res.json();
                 if (data.status === 'success') {
                     showToastNotification('Đã bắt đầu giám sát camera lớp học trực tiếp!', 'success');
@@ -2238,7 +2052,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const btnEndOffline = document.getElementById('btn-end-offline-class');
         if (btnEndOffline) {
             btnEndOffline.addEventListener('click', async () => {
-                const res = await fetch('/api/teacher/end_offline_class', { method: 'POST' });
+                const res = await fetch('/api/teacher/end_offline_class', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ class_id: selectedClassId() }) });
                 const data = await res.json();
                 if (data.status === 'success') {
                     showToastNotification('Đã dừng giám sát camera lớp học trực tiếp.', 'info');
@@ -2260,7 +2074,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     wsIndicator.textContent = '⚡ Trực tiếp';
                 }
                 teacherSocket.emit('join_teacher_room', {});
-                teacherSocket.emit('request_class_snapshot', {});
+                teacherSocket.emit('request_class_snapshot', { class_id: selectedClassId() });
             });
 
             teacherSocket.on('disconnect', () => {
@@ -2283,8 +2097,9 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             teacherSocket.on('class_snapshot', (data) => {
-                const classSelect = document.getElementById('select-class-monitor');
-                const classId = classSelect ? parseInt(classSelect.value) : 1;
+                const classId = selectedClassId();
+                // A teacher is in the rooms of all their classes: ignore other classes' snapshots.
+                if (data.class_id !== undefined && data.class_id !== null && data.class_id !== classId) return;
                 const filteredStudents = data.students.filter(s => s.class_id === classId);
                 cachedStudents = filteredStudents;
                 
@@ -2347,7 +2162,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.log('[WS] Student online:', data.name);
                 showToastNotification(`🟢 ${data.name} vừa kết nối vào lớp!`, 'success');
                 // Re-request snapshot to get updated online count
-                teacherSocket.emit('request_class_snapshot', {});
+                teacherSocket.emit('request_class_snapshot', { class_id: selectedClassId() });
             });
 
             // ⚡ REALTIME: Student video frame pushed from student browser
@@ -2461,49 +2276,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // AI Classroom Twin: Generate AI summary/evaluation for student
     function generateAISummary(student) {
-        const name = student.name;
-        const focus = student.focus_score;
-        const state = student.state;
-        const emotion = student.emotion || 'Neutral';
-        const risk = student.learning_risk || 0;
-        const level = student.learning_risk_level || 'Low';
-        const levelVi = {
-            'Low': 'Thấp',
-            'Medium': 'Trung bình',
-            'High': 'Cao'
-        }[level] || 'Thấp';
-        
-        // Emotion mapping to Vietnamese
-        const emotionVi = {
-            'Happy': 'Vui vẻ 😊',
-            'Neutral': 'Bình thường 😐',
-            'Tired': 'Mệt mỏi 😴',
-            'Stressed': 'Căng thẳng 😰'
-        }[emotion] || 'Bình thường 😐';
-        
-        let summary = '';
-        
-        if (!student.online) {
-            return `Học sinh <strong>${name}</strong> hiện đang ngoại tuyến. Hệ thống không ghi nhận hoạt động học tập nào trong lớp học này.`;
-        }
-        
-        if (state === 'Focused') {
-            if (focus >= 90) {
-                summary = `Học sinh <strong>${name}</strong> đang duy trì độ tập trung xuất sắc ở mức <strong>${focus}%</strong>. Trạng thái cảm xúc ${emotionVi} cho thấy tinh thần học tập thoải mái và hiệu quả. <span class="text-success"><br><i class="fa-solid fa-circle-check"></i> Khuyến nghị: Tiếp tục khuyến khích học sinh duy trì phong độ hiện tại.</span>`;
-            } else {
-                summary = `Học sinh <strong>${name}</strong> đang tập trung tốt (<strong>${focus}%</strong>). Cảm xúc học tập khá ổn định (${emotionVi}). <span class="text-success"><br><i class="fa-solid fa-circle-check"></i> Khuyến nghị: Đảm bảo học sinh tiếp tục theo dõi bài giảng, không cần can thiệp.</span>`;
-            }
-        } else if (state === 'Sleepy') {
-            summary = `Cảnh báo: Phát hiện học sinh <strong>${name}</strong> có dấu hiệu buồn ngủ/mệt mỏi. Độ tập trung giảm xuống còn <strong>${focus}%</strong> và cảm xúc ghi nhận là ${emotionVi}. Chỉ số rủi ro học tập ở mức <strong>${levelVi}</strong> (${risk}/100). <span class="text-warning"><br><i class="fa-solid fa-triangle-exclamation"></i> Khuyến nghị: Giáo viên nên gọi học sinh phát biểu hoặc cho phép đứng dậy rửa mặt để lấy lại sự tỉnh táo.</span>`;
-        } else if (state === 'Distracted') {
-            summary = `Cảnh báo: Học sinh <strong>${name}</strong> đang bị mất tập trung (ngoảnh mặt đi nơi khác) liên tục. Độ tập trung hiện tại là <strong>${focus}%</strong>. Chỉ số rủi ro học tập ở mức <strong>${levelVi}</strong> (${risk}/100). <span class="text-danger"><br><i class="fa-solid fa-circle-exclamation"></i> Khuyến nghị: Nhắc nhở gián tiếp bằng cách đặt câu hỏi tương tác hoặc di chuyển đến gần vị trí của học sinh.</span>`;
-        } else if (state === 'Phone') {
-            summary = `Cảnh báo NGHIÊM TRỌNG: Học sinh <strong>${name}</strong> đang sử dụng điện thoại di động trong lớp. Độ tập trung cực thấp (<strong>${focus}%</strong>). Chỉ số rủi ro học tập tăng cao lên mức <strong>${levelVi}</strong> (${risk}/100). <span class="text-danger"><br><i class="fa-solid fa-circle-xmark"></i> Khuyến nghị: Yêu cầu học sinh cất thiết bị di động để tập trung vào bài giảng ngay lập tức.</span>`;
-        } else {
-            summary = `Học sinh <strong>${name}</strong> đang có độ tập trung đạt <strong>${focus}%</strong> với trạng thái cảm xúc ${emotionVi}. <span class="text-info"><br><i class="fa-solid fa-circle-info"></i> Khuyến nghị: Theo dõi thêm diễn biến sự tập trung trong các phút tiếp theo.</span>`;
-        }
-        
-        return summary;
+        // Factual summary from server-recorded data only (no emotion, no invented risk).
+        const labels = student.labels || {};
+        const ev = student.event_counts || {};
+        const parts = [];
+        parts.push(`Điểm danh: <strong>${escapeHtml(labels.attendance || '—')}</strong>; khung hình: <strong>${escapeHtml(labels.visibility || '—')}</strong>.`);
+        parts.push(`Điểm tập trung hiện tại: <strong>${fmtScore(student.focus_score)}</strong>, trung bình buổi: <strong>${fmtScore(student.average_focus_score)}</strong>.`);
+        const evParts = Object.keys(EVENT_LABELS_VI).filter(k => ev[k]).map(k => `${EVENT_LABELS_VI[k]}: ${ev[k]}`);
+        parts.push(evParts.length ? `Sự kiện kéo dài: ${evParts.join(', ')}.` : 'Chưa ghi nhận sự kiện hành vi kéo dài.');
+        if (student.away_count) parts.push(`Rời chỗ ${student.away_count} lần, tổng ${Math.round((student.away_seconds || 0) / 60)} phút.`);
+        return parts.join('<br>');
     }
 
     // Classroom stats updater
@@ -2512,38 +2294,20 @@ document.addEventListener('DOMContentLoaded', () => {
         const activeCountEl = document.getElementById('class-active-count');
         const alertCountEl = document.getElementById('class-alert-count');
         const riskCountEl = document.getElementById('class-risk-count');
-        
         if (!students) return;
-        
-        const activeStudents = students.filter(s => s.online);
-        let avgFocus = 0;
-        if (activeStudents.length > 0) {
-            avgFocus = activeStudents.reduce((sum, s) => sum + (s.focus_score || 0), 0) / activeStudents.length;
-        } else if (students.length > 0) {
-            avgFocus = students.reduce((sum, s) => sum + (s.focus_score || 0), 0) / students.length;
-        }
+
+        const measured = students.filter(s => s.focus_score !== null && s.focus_score !== undefined && s.visibility_status === 'VISIBLE');
         if (avgFocusEl) {
-            avgFocusEl.textContent = `${Math.round(avgFocus)}%`;
+            avgFocusEl.textContent = measured.length
+                ? `${Math.round(measured.reduce((sum, s) => sum + s.focus_score, 0) / measured.length)}%`
+                : 'N/A';
         }
-        
-        if (activeCountEl) {
-            activeCountEl.textContent = `${activeStudents.length}/${students.length}`;
-        }
-        
-        let totalAlerts = 0;
-        if (logs && logs.length > 0) {
-            totalAlerts = logs.length;
-        } else {
-            totalAlerts = students.reduce((sum, s) => sum + (s.distractions || 0), 0);
-        }
-        if (alertCountEl) {
-            alertCountEl.textContent = totalAlerts;
-        }
-        
-        const riskStudents = students.filter(s => s.online && (s.learning_risk_level === 'High' || s.learning_risk_level === 'Medium'));
-        if (riskCountEl) {
-            riskCountEl.textContent = riskStudents.length;
-        }
+        const present = students.filter(s => s.attendance_status === 'PRESENT' || s.attendance_status === 'LATE');
+        if (activeCountEl) activeCountEl.textContent = `${present.length}/${students.length}`;
+        const totalEvents = students.reduce((sum, s) => sum + (s.distractions || 0), 0);
+        if (alertCountEl) alertCountEl.textContent = totalEvents;
+        const withBehaviour = students.filter(s => (s.active_behaviors || []).length > 0);
+        if (riskCountEl) riskCountEl.textContent = withBehaviour.length;
     }
 
     // 2D classroom seating twin layout renderer
@@ -2595,11 +2359,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     statusBg = 'rgba(239, 68, 68, 0.08)';
                     statusBorder = 'rgba(239, 68, 68, 0.25)';
                 } else {
-                    statusIndicator = '🟢';
-                    statusLabel = 'Tập trung';
-                    statusColor = '#10b981';
-                    statusBg = 'rgba(16, 185, 129, 0.08)';
-                    statusBorder = 'rgba(16, 185, 129, 0.25)';
+                    statusIndicator = '⚪';
+                    statusLabel = STATE_LABELS_VI[s.state] || 'Chưa có dữ liệu';
+                    statusColor = '#94a3b8';
+                    statusBg = 'rgba(148, 163, 184, 0.08)';
+                    statusBorder = 'rgba(148, 163, 184, 0.25)';
                 }
             }
             
@@ -2625,12 +2389,9 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             
             const initials = s.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
-            const emotionIcon = s.emotion_icon || '😐';
-            const emotionLabel = s.emotion || 'Neutral';
-            const emotionVi = {"Happy": "Vui vẻ", "Neutral": "Bình thường", "Tired": "Mệt mỏi", "Stressed": "Căng thẳng"};
-            const emoVi = emotionVi[emotionLabel] || emotionLabel;
-            const focusScore = s.focus_score || 0;
-            const onlineText = s.online ? 'Trực tuyến' : 'Ngoại tuyến';
+            const visLabel = (s.labels && s.labels.visibility) || '—';
+            const focusScore = fmtScore(s.focus_score);
+            const onlineText = (s.labels && s.labels.attendance) || (s.online ? 'Trực tuyến' : 'Ngoại tuyến');
             const onlineClass = s.online ? 'text-success' : 'text-muted';
             
             desk.innerHTML = `
@@ -2647,11 +2408,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="w-100 d-flex justify-content-between align-items-center mt-2 pt-2" style="border-top: 1px solid rgba(255, 255, 255, 0.06) !important;">
                     <div class="d-flex flex-column align-items-start">
                         <span class="text-muted" style="font-size: 0.6rem; opacity: 0.7;">Độ tập trung</span>
-                        <span class="fw-bold" style="color: ${statusColor}; font-size: 0.85rem;">${focusScore}%</span>
+                        <span class="fw-bold" style="color: ${statusColor}; font-size: 0.85rem;">${focusScore}</span>
                     </div>
                     <div class="d-flex flex-column align-items-end">
-                        <span class="text-muted" style="font-size: 0.6rem; opacity: 0.7;">Cảm xúc</span>
-                        <span class="text-white-50" style="font-size: 0.8rem;" title="${emoVi}">${emotionIcon} ${emoVi}</span>
+                        <span class="text-muted" style="font-size: 0.6rem; opacity: 0.7;">Khung hình</span>
+                        <span class="text-white-50" style="font-size: 0.8rem;">${escapeHtml(visLabel)}</span>
                     </div>
                 </div>
             `;
@@ -2681,7 +2442,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const initials = s.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
                 
                 desk.innerHTML = `
-                    <div class="score-badge-3d">${s.focus_score}%</div>
+                    <div class="score-badge-3d">${fmtScore(s.focus_score)}</div>
                     <div class="student-avatar-3d">${initials}</div>
                     <div class="student-name-3d">${s.name}</div>
                 `;
@@ -2698,37 +2459,30 @@ document.addEventListener('DOMContentLoaded', () => {
         function renderAttendanceTable(students) {
             const tbody = document.getElementById('attendance-table-body');
             if (!tbody) return;
-            
             tbody.innerHTML = '';
-            const classSelect = document.getElementById('select-class-monitor');
-            const classId = classSelect ? parseInt(classSelect.value) : 1;
+            const classId = selectedClassId();
             const filtered = students.filter(s => s.class_id === classId);
-            
             if (filtered.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Không có học sinh trong lớp này</td></tr>';
                 return;
             }
-            
+            const badges = {
+                PRESENT: '<span class="badge bg-success-subtle text-success border border-success">Có mặt</span>',
+                LATE: '<span class="badge bg-warning-subtle text-warning border border-warning">Đi muộn</span>',
+                ABSENT: '<span class="badge bg-danger-subtle text-danger border border-danger">Vắng mặt</span>',
+                NOT_YET: '<span class="badge bg-secondary-subtle text-secondary border border-secondary">Chưa điểm danh</span>'
+            };
             filtered.forEach(s => {
-                let statusBadge = '';
-                if (s.attendance === 'Có mặt') {
-                    statusBadge = '<span class="badge bg-success-subtle text-success border border-success">Có mặt</span>';
-                } else if (s.attendance === 'Đi muộn') {
-                    statusBadge = '<span class="badge bg-warning-subtle text-warning border border-warning">Đi muộn</span>';
-                } else {
-                    statusBadge = '<span class="badge bg-danger-subtle text-danger border border-danger">Vắng mặt</span>';
-                }
-                
-                const checkInTime = s.attendance !== 'Vắng mặt' ? '08:02 AM' : '—';
-                const method = s.attendance !== 'Vắng mặt' ? 'AI Nhận diện khuôn mặt' : '—';
-                
+                const seen = s.attendance_status === 'PRESENT' || s.attendance_status === 'LATE';
+                const method = !seen ? '—' : (s.identity_confidence !== null && s.identity_confidence !== undefined
+                    ? `Khuôn mặt (độ tương đồng ${s.identity_confidence})` : 'Tài khoản đăng nhập + camera cá nhân');
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
-                    <td><b>${s.roll || 'N/A'}</b></td>
-                    <td>${s.name}</td>
-                    <td>${statusBadge}</td>
-                    <td>${checkInTime}</td>
-                    <td><small class="text-muted">${method}</small></td>
+                    <td><b>${escapeHtml(s.roll || 'N/A')}</b></td>
+                    <td>${escapeHtml(s.name)}</td>
+                    <td>${badges[s.attendance_status] || badges.NOT_YET}</td>
+                    <td>${seen ? fmtClock(s.checkin_at) : '—'}</td>
+                    <td><small class="text-muted">${escapeHtml(method)}</small></td>
                 `;
                 tbody.appendChild(tr);
             });
@@ -2739,18 +2493,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const banner = document.getElementById('banner-ai-intervention');
             const textEl = document.getElementById('intervention-text');
             if (!banner || !textEl) return;
-            
-            let avg = 100;
-            const active = students.filter(s => s.online);
-            if (active.length > 0) {
-                avg = active.reduce((acc, s) => acc + s.focus_score, 0) / active.length;
-            } else if (students.length > 0) {
-                avg = students.reduce((acc, s) => acc + s.focus_score, 0) / students.length;
-            }
-            
+            const measured = students.filter(s => s.focus_score !== null && s.focus_score !== undefined && s.visibility_status === 'VISIBLE');
+            if (measured.length === 0) { banner.style.display = 'none'; return; }
+            const avg = measured.reduce((acc, s) => acc + s.focus_score, 0) / measured.length;
             if (avg < 75) {
                 banner.style.display = 'block';
-                textEl.innerHTML = `Lớp học đang giảm tập trung! Điểm trung bình là <b>${Math.round(avg)}%</b>. AI Đề xuất: <b>✓ Cho lớp nghỉ giải lao 5 phút, ✓ Đặt câu hỏi tương tác để khuấy động lớp học</b>`;
+                textEl.innerHTML = `Điểm tập trung trung bình của ${measured.length} học sinh đang được đo là <b>${Math.round(avg)}%</b> (dưới 75%).`;
             } else {
                 banner.style.display = 'none';
             }
@@ -2807,14 +2555,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     const sleepy = cachedStudents.filter(s => s.state === 'Sleepy').length;
                     const distracted = cachedStudents.filter(s => s.state === 'Distracted').length;
                     const phone = cachedStudents.filter(s => s.state === 'Phone').length;
-                    const avg = total > 0 ? Math.round(cachedStudents.reduce((acc, s) => acc + s.focus_score, 0) / total) : 100;
+                    const measuredS = cachedStudents.filter(s => s.focus_score !== null && s.focus_score !== undefined);
+                    const avg = measuredS.length > 0 ? Math.round(measuredS.reduce((acc, s) => acc + s.focus_score, 0) / measuredS.length) : null;
                     
-                    reply = `Điểm trung bình của lớp hiện tại là ${avg} phần trăm. Có ${online} học sinh trực tuyến. `;
+                    reply = avg === null ? 'Chưa có dữ liệu điểm tập trung. ' : `Điểm trung bình của ${measuredS.length} học sinh đang được đo là ${avg} phần trăm. `;
                     if (sleepy > 0 || phone > 0 || distracted > 0) {
                         reply += `Phát hiện ${sleepy} học sinh buồn ngủ, và ${phone} học sinh đang dùng điện thoại. `;
-                        reply += `Tôi đề xuất cho lớp nghỉ giải lao 5 phút hoặc đặt câu hỏi tương tác để cải thiện không khí học tập.`;
                     } else {
-                        reply += `Lớp đang tập trung rất tốt, không phát hiện vi phạm nào. Cần duy trì phong độ hiện tại.`;
+                        reply += `Hiện không có hành vi kéo dài nào được ghi nhận.`;
                     }
                 }
                 
@@ -2846,10 +2594,9 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateTeacherRootCauseChart(rootCause) {
         const canvas = document.getElementById('classRootCauseChart');
         if (!canvas) return;
-        
-        const data = [rootCause.phone_pct, rootCause.drowsy_pct, rootCause.distracted_pct];
+        // null => not enough data: draw nothing rather than invented percentages
+        const data = rootCause ? [rootCause.phone_pct, rootCause.drowsy_pct, rootCause.distracted_pct, rootCause.away_pct] : [0, 0, 0, 0];
         const ctx = canvas.getContext('2d');
-        
         if (classRootCauseChartObj) {
             classRootCauseChartObj.data.datasets[0].data = data;
             classRootCauseChartObj.update();
@@ -2857,19 +2604,13 @@ document.addEventListener('DOMContentLoaded', () => {
             classRootCauseChartObj = new Chart(ctx, {
                 type: 'doughnut',
                 data: {
-                    labels: ['Điện thoại', 'Buồn ngủ', 'Ngoảnh mặt'],
-                    datasets: [{
-                        data: data,
-                        backgroundColor: ['#ef4444', '#f59e0b', '#3b82f6'],
-                        borderWidth: 0
-                    }]
+                    labels: ['Điện thoại', 'Buồn ngủ', 'Quay đi chỗ khác', 'Rời chỗ'],
+                    datasets: [{ data: data, backgroundColor: ['#ef4444', '#f59e0b', '#3b82f6', '#94a3b8'], borderWidth: 0 }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: {
-                        legend: { position: 'bottom', labels: { color: getChartColors().text } }
-                    }
+                    plugins: { legend: { position: 'bottom', labels: { color: getChartColors().text } } }
                 }
             });
         }
@@ -2925,7 +2666,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Get teacher analytics summary
             try {
-                const resSummary = await fetch('/api/teacher/analytics_summary');
+                const resSummary = await fetch(`/api/teacher/analytics_summary?class_id=${selectedClassId()}`);
                 const summary = await resSummary.json();
                 if (summary.status === 'success') {
                     const dangerEl = document.getElementById('danger-hour-value');
@@ -2960,7 +2701,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             // Get activity logs
-            const resLogs = await fetch('/api/teacher/logs');
+            const resLogs = await fetch(`/api/teacher/logs?class_id=${selectedClassId()}`);
             const logs = await resLogs.json();
             renderActivityLogs(logs);
             renderTeacherAlertsTable(logs);
@@ -3008,7 +2749,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const trendIcon = student.focus_score >= 75
                     ? '<i class="fa-solid fa-arrow-trend-up text-success"></i>'
                     : '<i class="fa-solid fa-arrow-trend-down text-danger"></i>';
-                const scoreColor = student.focus_score >= 80 ? 'var(--success-color)' : (student.focus_score >= 50 ? 'var(--warning-color)' : 'var(--danger-color)');
+                const scoreColor = (student.focus_score === null || student.focus_score === undefined) ? '#94a3b8' : (student.focus_score >= 80 ? 'var(--success-color)' : (student.focus_score >= 50 ? 'var(--warning-color)' : 'var(--danger-color)'));
                 const onlineDotClass = student.online ? '' : 'offline';
 
                 // Check if we have a cached frame snapshot for this student
@@ -3028,14 +2769,14 @@ document.addEventListener('DOMContentLoaded', () => {
                         </div>
                         <div class="student-online-dot ${onlineDotClass}" title="${student.online ? 'Trực tuyến' : 'Ngoại tuyến'}"></div>
                         <div class="student-score-bar">
-                            <div class="student-score-bar-fill" style="width:${student.focus_score}%;background:${scoreColor};"></div>
+                            <div class="student-score-bar-fill" style="width:${scoreNum(student.focus_score)}%;background:${scoreColor};"></div>
                         </div>
                     </div>
                     <div class="student-card-info">
                         <h6 class="text-primary mb-1">${student.name}</h6>
                         <div class="student-focus-row">
                             <span>Độ tập trung</span>
-                            <span class="student-focus-value" style="color: ${scoreColor};">${student.focus_score}% ${trendIcon}</span>
+                            <span class="student-focus-value" style="color: ${scoreColor};">${fmtScore(student.focus_score)}</span>
                         </div>
                     </div>
                 `;
@@ -3071,15 +2812,15 @@ document.addEventListener('DOMContentLoaded', () => {
             else if (student.state === 'Sleepy') badgeClass = 'badge bg-warning text-dark';
             else if (student.state === 'Distracted' || student.state === 'Phone') badgeClass = 'badge bg-danger';
             
-            const stateLabels = { 'Focused': 'Tập trung', 'Sleepy': 'Buồn ngủ', 'Distracted': 'Mất tập trung', 'Phone': 'Dùng điện thoại' };
-            const stateLabel = stateLabels[student.state] || 'Bình thường';
+            const stateLabels = STATE_LABELS_VI;
+            const stateLabel = stateLabels[student.state] || 'Chưa có dữ liệu';
 
             const statusBadge = student.online 
                 ? '<span class="badge bg-success-subtle text-success border border-success">Trực tuyến</span>' 
                 : '<span class="badge bg-secondary-subtle text-secondary border border-secondary">Ngoại tuyến</span>';
             const initials = student.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
             
-            const scoreColor = student.focus_score >= 80 ? 'var(--success-color)' : (student.focus_score >= 50 ? 'var(--warning-color)' : 'var(--danger-color)');
+            const scoreColor = (student.focus_score === null || student.focus_score === undefined) ? '#94a3b8' : (student.focus_score >= 80 ? 'var(--success-color)' : (student.focus_score >= 50 ? 'var(--warning-color)' : 'var(--danger-color)'));
 
             tr.innerHTML = `
                 <td><strong>${student.roll || 'N/A'}</strong></td>
@@ -3094,7 +2835,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                 </td>
                 <td>${statusBadge} <span class="${badgeClass} ms-1">${stateLabel}</span></td>
-                <td class="text-center fw-bold" style="color: ${scoreColor};">${student.focus_score}%</td>
+                <td class="text-center fw-bold" style="color: ${scoreColor};">${fmtScore(student.focus_score)}</td>
                 <td class="text-center text-danger fw-bold">${student.distractions || 0}</td>
                 <td class="text-end">
                     <button class="btn btn-outline-primary btn-sm btn-view-detail"><i class="fa-solid fa-eye me-1"></i>Chi tiết</button>
@@ -3150,88 +2891,31 @@ document.addEventListener('DOMContentLoaded', () => {
         else if (student.state === 'Distracted' || student.state === 'Phone') badgeClass = 'badge bg-danger';
         badge.className = badgeClass;
         
-        const stateLabels = { 'Focused': 'Tập trung', 'Sleepy': 'Buồn ngủ', 'Distracted': 'Mất tập trung', 'Phone': 'Dùng điện thoại' };
-        const stateLabel = stateLabels[student.state] || 'Bình thường';
+        const stateLabels = STATE_LABELS_VI;
+        const stateLabel = stateLabels[student.state] || 'Chưa có dữ liệu';
         badge.textContent = stateLabel;
         
         const score = document.getElementById('detail-focus-score');
-        score.textContent = `${student.focus_score}%`;
-        score.className = student.focus_score >= 80 ? 'text-success font-bold' : (student.focus_score >= 50 ? 'text-warning font-bold' : 'text-danger font-bold');
+        score.textContent = fmtScore(student.focus_score);
+        score.className = (student.focus_score === null || student.focus_score === undefined) ? 'text-muted font-bold' : (student.focus_score >= 80 ? 'text-success font-bold' : (student.focus_score >= 50 ? 'text-warning font-bold' : 'text-danger font-bold'));
         
         document.getElementById('detail-distractions').textContent = student.distractions;
         
         const attState = document.getElementById('detail-attention');
-        if (student.focus_score >= 80) attState.textContent = 'Cao';
-        else if (student.focus_score >= 50) attState.textContent = 'Trung bình';
-        else attState.textContent = 'Thấp';
-        
-        document.getElementById('detail-activity').textContent = student.online ? 'Đang hoạt động' : 'Ngoại tuyến';
+        attState.textContent = stateLabel;
+        document.getElementById('detail-activity').textContent = (student.labels && student.labels.visibility) || '—';
 
-        // Update Emotion metrics
-        const detailEmotion = document.getElementById('detail-emotion');
-        const emotionVi = {"Happy": "Vui vẻ", "Neutral": "Bình thường", "Tired": "Mệt mỏi", "Stressed": "Căng thẳng"};
-        if (detailEmotion) detailEmotion.textContent = emotionVi[student.emotion || 'Neutral'] || student.emotion || 'Bình thường';
-        
-        const detailEmotionIcon = document.getElementById('detail-emotion-icon');
-        if (detailEmotionIcon) detailEmotionIcon.textContent = student.emotion_icon || '😐';
-        
-        const detailEmotionConf = document.getElementById('detail-emotion-confidence');
-        if (detailEmotionConf) detailEmotionConf.textContent = `${student.emotion_confidence || 90}%`;
-        
-        const detailTimeline = document.getElementById('detail-emotion-timeline');
-        if (detailTimeline) {
-            detailTimeline.innerHTML = '';
-            const history = student.emotion_history || [student.emotion || 'Neutral'];
-            const emotionIcons = {"Happy": "😊", "Neutral": "😐", "Tired": "😴", "Stressed": "😰"};
-            const emotionClasses = {
-                "Happy": "bg-success bg-opacity-25 text-success border border-success border-opacity-50",
-                "Neutral": "bg-info bg-opacity-25 text-info border border-info border-opacity-50",
-                "Tired": "bg-warning bg-opacity-25 text-warning border border-warning border-opacity-50",
-                "Stressed": "bg-danger bg-opacity-25 text-danger border border-danger border-opacity-50"
-            };
-            history.forEach(emo => {
-                const span = document.createElement('span');
-                span.className = `badge rounded-pill px-2 py-1 ${emotionClasses[emo] || 'bg-secondary bg-opacity-25 text-white border border-secondary border-opacity-50'}`;
-                span.style.fontSize = '0.6rem';
-                span.style.fontWeight = '500';
-                const emoVi = emotionVi[emo] || emo;
-                span.innerHTML = `${emotionIcons[emo] || '😐'} ${emoVi}`;
-                detailTimeline.appendChild(span);
-            });
-        }
-
-        // Update Learning Risk and AI Summary
-        const detailRiskScore = document.getElementById('detail-risk-score');
-        const detailRiskLevel = document.getElementById('detail-risk-level');
+        const setDetail = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+        const lbl = student.labels || {};
+        setDetail('detail-attendance-status', lbl.attendance || '—');
+        setDetail('detail-visibility-status', lbl.visibility || '—');
+        setDetail('detail-connection-status', lbl.connection || '—');
+        setDetail('detail-identity-status', (lbl.identity || '—') + (student.identity_confidence ? ` (${student.identity_confidence})` : ''));
         const detailAiSummary = document.getElementById('detail-ai-summary');
-        
-        if (detailRiskScore) {
-            detailRiskScore.textContent = student.learning_risk !== undefined ? student.learning_risk : 0;
-        }
-        if (detailRiskLevel) {
-            const riskLevel = student.learning_risk_level || 'Low';
-            const riskLevelVi = {
-                'Low': 'Thấp',
-                'Medium': 'Trung bình',
-                'High': 'Cao'
-            }[riskLevel] || 'Thấp';
-            detailRiskLevel.textContent = riskLevelVi;
-            
-            // Set risk level badge colors
-            let levelClass = 'badge bg-success';
-            if (riskLevel === 'Medium') {
-                levelClass = 'badge bg-warning text-dark';
-            } else if (riskLevel === 'High') {
-                levelClass = 'badge bg-danger';
-            }
-            detailRiskLevel.className = levelClass;
-        }
-        if (detailAiSummary) {
-            detailAiSummary.innerHTML = generateAISummary(student);
-        }
+        if (detailAiSummary) detailAiSummary.innerHTML = generateAISummary(student);
 
         // Recreate mini student history chart
-        renderMiniStudentChart(student.focus_history);
+        renderMiniStudentChart(student.focus_history || []);
     }
 
     window.showStudentDetail = function(name) {
@@ -3239,8 +2923,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (student) {
             showStudentDetailPanel(student);
         } else {
-            const mockStudent = { name: name, roll: 'N/A', focus_score: 80, distractions: 0, online: false };
-            showStudentDetailPanel(mockStudent);
+            showStudentDetailPanel({ name: name, roll: 'N/A', focus_score: null, distractions: 0, online: false, state: 'Unknown' });
         }
     };
 
@@ -3286,22 +2969,19 @@ document.addEventListener('DOMContentLoaded', () => {
         const list = document.getElementById('activity-log-list');
         if (!list) return;
         list.innerHTML = '';
-        
-        if (logs.length === 0) {
+        if (!logs || logs.length === 0) {
             list.innerHTML = '<div class="text-center py-3 text-muted small">Chưa có nhật ký hoạt động</div>';
             return;
         }
-        
         logs.slice().reverse().forEach(log => {
             const item = document.createElement('div');
             let typeClass = 'log-info';
-            if (log.type === 'warning') typeClass = 'log-warning';
-            else if (log.type === 'danger') typeClass = 'log-danger';
-            
+            if (log.type === 'behavior_started') typeClass = 'log-danger';
+            else if (log.type === 'client_report') typeClass = 'log-warning';
             item.className = `activity-log-item ${typeClass}`;
             item.innerHTML = `
-                <div class="fw-bold me-2 text-primary" style="white-space: nowrap;">[${log.time}]</div>
-                <div class="text-secondary">${log.message}</div>
+                <div class="fw-bold me-2 text-primary" style="white-space: nowrap;">[${fmtClock(log.time)}]</div>
+                <div class="text-secondary">${escapeHtml(log.message)}</div>
             `;
             list.appendChild(item);
         });
@@ -3379,10 +3059,10 @@ document.addEventListener('DOMContentLoaded', () => {
             analyticsTrendChart = new Chart(trendCtx, {
                 type: 'line',
                 data: {
-                    labels: ['09:00', '09:15', '09:30', '09:45', '10:00', '10:15', '10:30'],
+                    labels: [],
                     datasets: [{
                         label: 'Mức độ tập trung TB lớp (%)',
-                        data: [82, 85, 78, 88, 85, 80, 84],
+                        data: [],
                         borderColor: '#10b981',
                         backgroundColor: 'rgba(16, 185, 129, 0.1)',
                         borderWidth: 3,
@@ -3405,7 +3085,7 @@ document.addEventListener('DOMContentLoaded', () => {
             analyticsTypesChart = new Chart(typesCtx, {
                 type: 'bar',
                 data: {
-                    labels: ['Tập trung', 'Bình thường', 'Mất tập trung', 'Buồn ngủ', 'Dùng điện thoại'],
+                    labels: ['Tập trung', 'Chưa đo / khuất', 'Quay đi chỗ khác', 'Buồn ngủ', 'Dùng điện thoại'],
                     datasets: [{
                         label: 'Số lượt ghi nhận',
                         data: [0, 0, 0, 0, 0],
@@ -3426,8 +3106,8 @@ document.addEventListener('DOMContentLoaded', () => {
         
         let high = 0, med = 0, low = 0;
         let sum = 0;
-        
-        students.forEach(s => {
+        const measuredStudents = students.filter(s => s.focus_score !== null && s.focus_score !== undefined);
+        measuredStudents.forEach(s => {
             sum += s.focus_score;
             if (s.focus_score >= 80) high++;
             else if (s.focus_score >= 50) med++;
@@ -3441,18 +3121,20 @@ document.addEventListener('DOMContentLoaded', () => {
         // Update donut center total count
         const donutTotalStudentsEl = document.getElementById('donut-total-students');
         if (donutTotalStudentsEl) {
-            donutTotalStudentsEl.textContent = `${students.length} Học sinh`;
+            donutTotalStudentsEl.textContent = `${measuredStudents.length}/${students.length} đo được`;
         }
         
-        const avg = students.length > 0 ? Math.round(sum / students.length) : 0;
+        const avg = measuredStudents.length > 0 ? Math.round(sum / measuredStudents.length) : null;
         
         // Update line class average
         if (lineAvgChartObj) {
             const now = new Date();
             const timeStr = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
             
-            lineAvgChartObj.data.labels.push(timeStr);
-            lineAvgChartObj.data.datasets[0].data.push(avg);
+            if (avg !== null) {
+                lineAvgChartObj.data.labels.push(timeStr);
+                lineAvgChartObj.data.datasets[0].data.push(avg);
+            }
             
             if (lineAvgChartObj.data.labels.length > 15) {
                 lineAvgChartObj.data.labels.shift();
@@ -3463,7 +3145,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Update Teacher Analytics page stats & charts if initialized
         const avgScoreEl = document.getElementById('analytics-avg-score');
-        if (avgScoreEl) avgScoreEl.textContent = `${avg}%`;
+        if (avgScoreEl) avgScoreEl.textContent = avg === null ? 'N/A' : `${avg}%`;
 
         const totalDistractionsEl = document.getElementById('analytics-total-distractions');
         if (totalDistractionsEl) {
@@ -3473,12 +3155,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const bestStudentEl = document.getElementById('analytics-best-student');
-        if (bestStudentEl && students.length > 0) {
-            let best = students[0];
-            students.forEach(s => {
-                if (s.focus_score > best.focus_score) best = s;
-            });
-            bestStudentEl.textContent = best.name;
+        if (bestStudentEl) {
+            if (measuredStudents.length > 0) {
+                let best = measuredStudents[0];
+                measuredStudents.forEach(s => { if (s.focus_score > best.focus_score) best = s; });
+                bestStudentEl.textContent = best.name;
+            } else {
+                bestStudentEl.textContent = 'N/A';
+            }
         }
 
         if (analyticsTypesChart && students.length > 0) {
@@ -3525,8 +3209,8 @@ document.addEventListener('DOMContentLoaded', () => {
             else if (student.state === 'Sleepy') badgeClass = 'badge bg-warning text-dark';
             else if (student.state === 'Distracted' || student.state === 'Phone') badgeClass = 'badge bg-danger';
             
-            const stateLabels = { 'Focused': 'Tập trung', 'Sleepy': 'Buồn ngủ', 'Distracted': 'Mất tập trung', 'Phone': 'Dùng điện thoại' };
-            const stateLabel = stateLabels[student.state] || 'Bình thường';
+            const stateLabels = STATE_LABELS_VI;
+            const stateLabel = stateLabels[student.state] || 'Chưa có dữ liệu';
 
             const statusBadge = student.online ? '<span class="badge bg-success-subtle text-success border border-success">Trực tuyến</span>' : '<span class="badge bg-secondary-subtle text-secondary border border-secondary">Ngoại tuyến</span>';
             const initials = student.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
@@ -3540,14 +3224,14 @@ document.addEventListener('DOMContentLoaded', () => {
                         </div>
                         <div>
                             <span class="d-block fw-semibold">${student.name}</span>
-                            <small class="text-muted">ID: @${student.username || 'student'}</small>
+                            <small class="text-muted">${escapeHtml(student.labels ? student.labels.attendance : '')}</small>
                         </div>
                     </div>
                 </td>
                 <td>${statusBadge} <span class="${badgeClass} ms-1">${stateLabel}</span></td>
-                <td class="text-center fw-bold text-primary">${student.focus_score}%</td>
+                <td class="text-center fw-bold text-primary">${fmtScore(student.focus_score)}</td>
                 <td class="text-center text-danger fw-bold">${student.distractions || 0}</td>
-                <td>${student.online ? 'Đang hoạt động' : 'Ngoại tuyến'}</td>
+                <td>${escapeHtml(student.labels ? student.labels.visibility : '—')}</td>
                 <td class="text-end">
                     <button class="btn btn-outline-primary btn-sm" onclick="showStudentDetail('${student.name}')"><i class="fa-solid fa-eye me-1"></i>Xem chi tiết</button>
                 </td>
@@ -3567,34 +3251,22 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderTeacherAlertsTable(logs) {
         const tbody = document.getElementById('teacher-alerts-table-body');
         if (!tbody) return;
-        
         tbody.innerHTML = '';
-        if (!logs || logs.length === 0) {
+        const alerts = (logs || []).filter(l => l.type === 'behavior_started' && l.episode);
+        if (alerts.length === 0) {
             tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">Chưa có cảnh báo nào được ghi nhận.</td></tr>';
             return;
         }
-        
-        logs.forEach(log => {
+        const severity = { PHONE: 'Cao', DROWSY: 'Trung bình', HEAD_AWAY: 'Thấp', AWAY: 'Trung bình' };
+        alerts.slice().reverse().forEach(log => {
+            const kind = log.episode.type;
+            const student = cachedStudents.find(s => s.student_id === log.student_id);
             const tr = document.createElement('tr');
-            
-            let typeBadge = '';
-            let severityBadge = '';
-            if (log.type === 'danger' || log.text.includes('Phone') || log.text.includes('điện thoại')) {
-                typeBadge = '<span class="badge bg-danger-subtle text-danger border border-danger">Điện thoại</span>';
-                severityBadge = '<span class="badge bg-danger">Cao</span>';
-            } else if (log.text.includes('Sleepy') || log.text.includes('buồn ngủ') || log.text.includes('ngủ gật')) {
-                typeBadge = '<span class="badge bg-warning-subtle text-warning border border-warning">Ngủ gật</span>';
-                severityBadge = '<span class="badge bg-warning text-dark">Trung bình</span>';
-            } else {
-                typeBadge = '<span class="badge bg-info-subtle text-info border border-info">Mất tập trung</span>';
-                severityBadge = '<span class="badge bg-info">Thấp</span>';
-            }
-            
             tr.innerHTML = `
-                <td>${log.time || ''}</td>
-                <td><strong>${log.student || 'Học sinh'}</strong></td>
-                <td>${typeBadge}</td>
-                <td>${severityBadge}</td>
+                <td>${fmtClock(log.time)}</td>
+                <td><strong>${escapeHtml(student ? student.name : ('#' + log.student_id))}</strong></td>
+                <td><span class="badge bg-danger-subtle text-danger border border-danger">${escapeHtml(EVENT_LABELS_VI[kind] || kind)}</span></td>
+                <td><span class="badge bg-secondary">${severity[kind] || '—'}</span></td>
                 <td><span class="badge bg-success-subtle text-success">Đã ghi nhận</span></td>
                 <td class="text-end">
                     <button class="btn btn-outline-secondary btn-sm" onclick="this.closest('tr').style.opacity=0.5; this.disabled=true;">Bỏ qua</button>
@@ -3852,13 +3524,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     const tr = document.createElement('tr');
                     tr.innerHTML = `
                         <td>${c.id}</td>
-                        <td><strong>${c.class_name}</strong></td>
+                        <td><strong>${escapeHtml(c.class_name)}</strong></td>
                         <td><span class="badge bg-info-subtle text-info border border-info px-2 py-1">${c.student_count || 0} Học sinh</span></td>
                         <td class="text-end">
-                            <button class="btn btn-sm btn-outline-primary edit-class-btn me-2" data-id="${c.id}" data-name="${c.class_name}" title="Sửa">
+                            <button class="btn btn-sm btn-outline-primary edit-class-btn me-2" data-id="${c.id}" data-name="${escapeHtml(c.class_name)}" title="Sửa">
                                 <i class="fa-solid fa-pen-to-square"></i>
                             </button>
-                            <button class="btn btn-sm btn-outline-danger delete-class-btn" data-id="${c.id}" data-name="${c.class_name}" title="Xóa">
+                            <button class="btn btn-sm btn-outline-danger delete-class-btn" data-id="${c.id}" data-name="${escapeHtml(c.class_name)}" title="Xóa">
                                 <i class="fa-solid fa-trash"></i>
                             </button>
                         </td>
@@ -3922,35 +3594,35 @@ document.addEventListener('DOMContentLoaded', () => {
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td>${u.id}</td>
-                    <td><strong>${u.username}</strong></td>
+                    <td><strong>${escapeHtml(u.username)}</strong></td>
                     <td>
                         <div class="d-flex align-items-center gap-2">
                             ${u.role === 'student' ? `
-                                <img src="${u.has_face ? `/static/uploads/avatars/student_${u.id}.jpg?t=${Date.now()}` : 'data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2232%22 height=%2232%22 viewBox=%220 0 32 32%22><circle cx=%2216%22 cy=%2216%22 r=%2216%22 fill=%22%23e9ecef%22/><text x=%2250%%22 y=%2250%%22 fill=%22%23adb5bd%22 font-size=%2214%22 font-family=%22Arial%22 dy=%22.3em%22 text-anchor=%22middle%22>?</text></svg>'}" 
+                                <img src="${u.has_face ? 'data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2232%22 height=%2232%22 viewBox=%220 0 32 32%22><circle cx=%2216%22 cy=%2216%22 r=%2216%22 fill=%22%23d1fae5%22/><text x=%2250%%22 y=%2250%%22 fill=%22%23059669%22 font-size=%2216%22 font-family=%22Arial%22 dy=%22.3em%22 text-anchor=%22middle%22>✓</text></svg>' : 'data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2232%22 height=%2232%22 viewBox=%220 0 32 32%22><circle cx=%2216%22 cy=%2216%22 r=%2216%22 fill=%22%23e9ecef%22/><text x=%2250%%22 y=%2250%%22 fill=%22%23adb5bd%22 font-size=%2214%22 font-family=%22Arial%22 dy=%22.3em%22 text-anchor=%22middle%22>?</text></svg>'}" 
                                      alt="Avatar" 
                                      class="rounded-circle border" 
                                      style="width: 32px; height: 32px; object-fit: cover;"
-                                     onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2232%22 height=%2232%22 viewBox=%220 0 32 32%22><circle cx=%2216%22 cy=%2216%22 r=%2216%22 fill=%22%236c757d%22/><text x=%2250%%22 y=%2255%%22 fill=%22white%22 font-size=%2212%22 font-family=%22Arial%22 dy=%22.3em%22 text-anchor=%22middle%22>${u.display_name.charAt(0)}</text></svg>'">
+                                     onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2232%22 height=%2232%22 viewBox=%220 0 32 32%22><circle cx=%2216%22 cy=%2216%22 r=%2216%22 fill=%22%236c757d%22/><text x=%2250%%22 y=%2255%%22 fill=%22white%22 font-size=%2212%22 font-family=%22Arial%22 dy=%22.3em%22 text-anchor=%22middle%22>${escapeHtml(String(u.display_name || '').charAt(0))}</text></svg>'">
                             ` : `
                                 <div class="rounded-circle bg-light border d-flex align-items-center justify-content-center text-muted" style="width: 32px; height: 32px; font-size: 12px; font-weight: bold;">
-                                    ${u.display_name.charAt(0)}
+                                    ${escapeHtml(String(u.display_name || '').charAt(0))}
                                 </div>
                             `}
-                            <span>${u.display_name}</span>
+                            <span>${escapeHtml(u.display_name)}</span>
                         </div>
                     </td>
                     <td><span class="badge ${u.role === 'admin' ? 'bg-danger' : (u.role === 'teacher' ? 'bg-primary' : 'bg-success')}">${u.role === 'admin' ? 'Quản trị viên' : (u.role === 'teacher' ? 'Giáo viên' : 'Học sinh')}</span></td>
-                    <td>${u.class_name}</td>
+                    <td>${escapeHtml(u.class_name)}</td>
                     <td class="text-end">
                         ${u.role === 'student' ? `
-                        <button class="btn btn-sm ${u.has_face ? 'btn-success' : 'btn-outline-info'} register-face-btn me-2" data-id="${u.id}" data-display-name="${u.display_name}" data-has-face="${u.has_face}" title="${u.has_face ? 'Đã đăng ký khuôn mặt' : 'Chụp/Đăng ký khuôn mặt'}">
+                        <button class="btn btn-sm ${u.has_face ? 'btn-success' : 'btn-outline-info'} register-face-btn me-2" data-id="${u.id}" data-display-name="${escapeHtml(u.display_name)}" data-has-face="${u.has_face}" title="${u.has_face ? 'Đã đăng ký khuôn mặt' : 'Chụp/Đăng ký khuôn mặt'}">
                             <i class="fa-solid ${u.has_face ? 'fa-user-check' : 'fa-camera'}"></i>
                         </button>
                         ` : ''}
-                        <button class="btn btn-sm btn-outline-primary edit-user-btn me-2" data-id="${u.id}" data-username="${u.username}" data-display-name="${u.display_name}" data-role="${u.role}" data-class-id="${u.class_id || ''}" title="Sửa tài khoản">
+                        <button class="btn btn-sm btn-outline-primary edit-user-btn me-2" data-id="${u.id}" data-username="${escapeHtml(u.username)}" data-display-name="${escapeHtml(u.display_name)}" data-role="${u.role}" data-class-id="${u.class_id || ''}" title="Sửa tài khoản">
                             <i class="fa-solid fa-user-gear"></i>
                         </button>
-                        <button class="btn btn-sm btn-outline-danger delete-user-btn" data-id="${u.id}" data-username="${u.username}" title="Xóa tài khoản">
+                        <button class="btn btn-sm btn-outline-danger delete-user-btn" data-id="${u.id}" data-username="${escapeHtml(u.username)}" title="Xóa tài khoản">
                             <i class="fa-solid fa-trash"></i>
                         </button>
                     </td>
@@ -4104,14 +3776,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (badge) { badge.className = `student-badge ${badgeClass}`; badge.textContent = `${stateIcon} ${stateText}`; }
                 
                 // Update focus score and bar
-                const scoreColor = student.focus_score >= 80 ? 'var(--success-color)' : (student.focus_score >= 50 ? 'var(--warning-color)' : 'var(--danger-color)');
+                const scoreColor = (student.focus_score === null || student.focus_score === undefined) ? '#94a3b8' : (student.focus_score >= 80 ? 'var(--success-color)' : (student.focus_score >= 50 ? 'var(--warning-color)' : 'var(--danger-color)'));
                 const trendIcon = student.focus_score >= 75
                     ? '<i class="fa-solid fa-arrow-trend-up text-success"></i>'
                     : '<i class="fa-solid fa-arrow-trend-down text-danger"></i>';
                 const scoreEl = card.querySelector('.student-focus-value');
-                if (scoreEl) { scoreEl.innerHTML = `${student.focus_score}% ${trendIcon}`; scoreEl.style.color = scoreColor; }
+                if (scoreEl) { scoreEl.innerHTML = `${fmtScore(student.focus_score)}`; scoreEl.style.color = scoreColor; }
                 const barFill = card.querySelector('.student-score-bar-fill');
-                if (barFill) { barFill.style.width = `${student.focus_score}%`; barFill.style.background = scoreColor; }
+                if (barFill) { barFill.style.width = `${scoreNum(student.focus_score)}%`; barFill.style.background = scoreColor; }
 
                 // Update online status dot
                 const onlineDot = card.querySelector('.student-online-dot');
@@ -4177,74 +3849,21 @@ document.addEventListener('DOMContentLoaded', () => {
     // ----------------------------------------------------------------
     // STUDENT WebSocket: push focus data + video frames to server
     // ----------------------------------------------------------------
-    function initStudentSocket(displayName) {
+    function initStudentSocket() {
         if (typeof io === 'undefined') return;
         const studentSocket = io();
         window.studentSocketGlobal = studentSocket;
-        let lastPushedState = null;
-        // Hidden canvas used for frame capture
-        const captureCanvas = document.createElement('canvas');
-        captureCanvas.width = 320;
-        captureCanvas.height = 240;
-        const captureCtx = captureCanvas.getContext('2d');
-
-        studentSocket.on('connect', () => {
-            console.log('[WS] Student connected:', studentSocket.id);
-            studentSocket.emit('join_student_room', { name: displayName });
-        });
-
-        // Teacher started class → notify student
+        // Identity comes from the authenticated server session; the browser
+        // never sends its name, state, score or frames.
         studentSocket.on('class_started', (data) => {
             showToastNotification(`📢 ${data.message}`, 'info');
         });
-
-        // Teacher ended class → notify student
         studentSocket.on('class_ended', (data) => {
             showToastNotification(`🔔 ${data.message}`, 'warning');
         });
-
-        // Push focus data every 2 seconds if session is active
-        setInterval(() => {
-            if (!isSessionActive) return;
-            const stateMap = {
-                'DUNG DIEN THOAI': 'Phone',
-                'BUON NGU': 'Sleepy',
-                'NGOANH MAT DI': 'Distracted',
-                'KHONG THAY KHUON MAT': 'Distracted',
-                'TAP TRUNG': 'Focused'
-            };
-            const rawState = lastLoggedState || 'TAP TRUNG';
-            const state = stateMap[rawState] || 'Focused';
-
-            if (state !== lastPushedState) {
-                lastPushedState = state;
-                studentSocket.emit('student_data_push', {
-                    name: displayName,
-                    state: state,
-                    focus_score: parseInt(document.getElementById('focus-score')?.textContent || '100'),
-                    distractions: parseInt(document.getElementById('distraction-count')?.textContent || '0')
-                });
-            }
-        }, 2000);
-
-        // 🎥 Push video frame snapshots every 3 seconds when session active
-        setInterval(() => {
-            if (!isSessionActive) return;
-            const videoEl = document.getElementById('video-stream');
-            if (!videoEl || !videoEl.src || videoEl.style.opacity === '0.4') return;
-
-            // Capture current frame from the video element
-            try {
-                captureCtx.drawImage(videoEl, 0, 0, captureCanvas.width, captureCanvas.height);
-                const frameDataUrl = captureCanvas.toDataURL('image/jpeg', 0.4); // 40% quality for bandwidth
-                studentSocket.emit('student_frame_push', {
-                    name: displayName,
-                    frame: frameDataUrl
-                });
-            } catch (e) {
-                // Cross-origin video (MJPEG stream) — fallback: server-side frame forwarding handles it
-            }
-        }, 3000);
+        studentSocket.on('error', (err) => {
+            console.warn('[WS] server rejected:', err);
+        });
     }
 
     // --- Init Phase ---
@@ -4258,7 +3877,7 @@ document.addEventListener('DOMContentLoaded', () => {
         loadSettings();
         handlePageRouting();
         initSessionState();
-        updateGauge(100);
+        updateGauge(null);
         
         // Listen for stats period dropdown changes
         const selectPeriod = document.getElementById('select-stats-period');
@@ -4266,9 +3885,8 @@ document.addEventListener('DOMContentLoaded', () => {
             selectPeriod.addEventListener('change', loadSessionHistory);
         }
         
-        // Connect student WebSocket for realtime push to teacher
-        const studentName = window.DISPLAY_NAME || 'Aarav Mehta';
-        initStudentSocket(studentName);
+        // Connect student WebSocket (receive-only; server is authoritative)
+        initStudentSocket();
         
         // Tab switching detection for Anti-Cheating
         tabSwitchCount = 0;
@@ -4278,10 +3896,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 tabSwitchCount++;
                 showToastNotification(`⚠ Phát hiện chuyển tab trình duyệt (${tabSwitchCount} lần)!`, 'danger');
                 if (window.studentSocketGlobal && window.studentSocketGlobal.connected) {
-                    window.studentSocketGlobal.emit('student_tab_switch', {
-                        name: studentName,
-                        tab_switches: tabSwitchCount
-                    });
+                    window.studentSocketGlobal.emit('student_tab_switch', {});
                 }
             }
         });
