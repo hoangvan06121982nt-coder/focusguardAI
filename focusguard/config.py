@@ -76,13 +76,21 @@ class BehaviorConfig:
     # baseline is a high percentile of that student's recent EAR. A fixed 0.22
     # produced drowsy episodes for a real student with open eyes (EAR of open
     # eyes depends on the person and the camera angle).
-    ear_closed_ratio: float = 0.75
+    # 0.6 from the real run: open-eye EAR p20 ~0.196 / median ~0.248 for the
+    # volunteer, closed eyes <= ~0.12; 0.75*baseline (~0.216) flagged open eyes.
+    ear_closed_ratio: float = 0.6
     ear_baseline_percentile: float = 0.8
     ear_baseline_window_seconds: float = 60.0
     ear_baseline_min_seconds: float = 2.0
     ear_baseline_min_samples: int = 10
-    # Minimum detector confidence for a phone box to count.
-    phone_min_confidence: float = 0.35
+    # Minimum detector confidence for a phone box to count. Real run: during
+    # continuous phone use YOLOv8n scored the phone 0.25-0.62, so 0.35 split the
+    # signal into fragments shorter than the 1 s confirmation.
+    phone_min_confidence: float = 0.25
+    # Phone detections drop out for a few frames (3 missed frames = 0.4 s at
+    # 7.5 FPS); a longer gap tolerance keeps one episode. Temporal confirmation
+    # (phone_min_seconds) still rejects a single short flash.
+    phone_gap_tolerance_seconds: float = 1.0
     # Fraction of the phone box that must lie inside the person's box.
     phone_min_containment: float = 0.6
 
@@ -138,6 +146,7 @@ class PipelineConfig:
             head_away_min_seconds=_env_float("FG_HEAD_AWAY_MIN_SECONDS", beh.head_away_min_seconds),
             phone_min_seconds=_env_float("FG_PHONE_MIN_SECONDS", beh.phone_min_seconds),
             phone_min_confidence=_env_float("FG_PHONE_MIN_CONFIDENCE", beh.phone_min_confidence),
+            ear_closed_ratio=_env_float("FG_EAR_CLOSED_RATIO", beh.ear_closed_ratio),
         )
         att = AttendanceConfig(late_after_seconds=_env_float("FG_LATE_AFTER_SECONDS", 300.0))
         return cls(identity=ident, behavior=beh, attendance=att)

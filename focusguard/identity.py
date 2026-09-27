@@ -84,6 +84,8 @@ class TrackIdentity:
     contradict_count: int = 0
     contradict_since: Optional[float] = None
     stranger_since: Optional[float] = None      # first clear non-match while locked
+    previous_student: Optional[int] = None      # student this track owned before a handover
+    previous_at: Optional[float] = None
     conflict_with_track: Optional[int] = None
     first_seen: Optional[float] = None
     last_seen: Optional[float] = None
@@ -125,6 +127,7 @@ class IdentityManager:
         self._recently_lost: Dict[int, float] = {}          # student_id -> lost ts
         self.events: List[IdentityEvent] = []
         self._occluded: set = set()
+        self._present: set = set()
         self.set_gallery(gallery or {})
 
     # ------------------------------------------------------------------ gallery
@@ -203,6 +206,7 @@ class IdentityManager:
             if len(item) > 2 and item[2]:
                 occluded.add(tid)
         self._occluded = occluded
+        self._present = {tid for tid, _ in obs}
         matches = {tid: self.match(emb) for tid, emb in obs}
 
         # Locked tracks first so existing bindings are respected, then unlocked
@@ -309,14 +313,23 @@ class IdentityManager:
         recovering = self._is_recovering(accepted, now)
         needed = self.config.recovery_consecutive if recovering else self.config.confirm_consecutive
         min_secs = 0.0 if recovering else self.config.confirm_min_seconds
+        if (t.previous_student == accepted and t.previous_at is not None
+                and now - t.previous_at <= self.config.recovery_window_seconds):
+            # This very track was confirmed for this student moments ago and
+            # only lost it to a duplicate id of the same person.
+            needed, min_secs, recovering = 1, 0.0, True
         if t.candidate_count < needed or (now - (t.candidate_since or now)) < min_secs:
             return
 
         owner = self._owner.get(accepted)
         if owner is not None and owner != t.track_id:
-            owner_t = self.tracks.get(owner)
-            owner_alive = owner_t is not None and owner_t.last_seen is not None and \
-                (now - owner_t.last_seen) < self.config.track_lost_seconds
+            # The owner blocks this claim only while it is visible in THIS
+            # frame. Real run: the tracker kept two ids for one person and
+            # reported one or the other per frame; the id carrying the (fully
+            # confirmed) face must be able to take over, otherwise the student
+            # flickers to "not visible". Two tracks visible at once with the
+            # same face remain a CONFLICT (one student, one track).
+            owner_alive = owner in getattr(self, "_present", ())
             if owner_alive:
                 if was_conflict_owner != owner:
                     self.events.append(IdentityEvent("CONFLICT", t.track_id, accepted, now,
@@ -324,8 +337,12 @@ class IdentityManager:
                 t.status = CONFLICT
                 t.conflict_with_track = owner
                 return
-            # Owner track is gone: hand the identity over (track recovery).
-            self._release(owner, reason="owner_lost", now=now)
+            # Owner track is not visible now: hand the identity over (track recovery).
+            owner_t = self.tracks.get(owner)
+            if owner_t is not None:
+                owner_t.previous_student, owner_t.previous_at = accepted, now
+            self._release(owner, reason="owner_not_visible", now=now)
+            recovering = True
 
         cooldown = self._cooldown_until.get(accepted)
         if cooldown is not None and now < cooldown and m.best_similarity < self.config.steal_similarity:

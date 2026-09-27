@@ -199,8 +199,12 @@ class BehaviorAnalyzer:
         self.visibility_status = rs.VIS_VISIBLE
 
         raw = self.raw_signals(obs)
-        for kind, tracker in self._signals.items():
+        for kind, tracker in self._signals.items():   # PHONE is stepped first
             on, conf = raw[kind]
+            if kind == DROWSY and self._phone_active(now):
+                # Eyes looking down at a phone look "closed" to EAR; while a
+                # phone is in use the eye signal is not evidence of drowsiness.
+                on = False
             self._step_signal(tracker, on, conf, now, obs, out)
 
         self.focus_state = rs.FOCUS_FOCUSED
@@ -214,9 +218,16 @@ class BehaviorAnalyzer:
                 # the state is unknown (score frozen), never "focused".
                 self.focus_state = rs.FOCUS_UNKNOWN
 
+    def _gap(self, kind: str) -> float:
+        return self.config.phone_gap_tolerance_seconds if kind == PHONE else self.config.gap_tolerance_seconds
+
+    def _phone_active(self, now: float) -> bool:
+        t = self._signals[PHONE]
+        return t.last_true is not None and now - t.last_true <= self._gap(PHONE)
+
     def _step_signal(self, t: _SignalTracker, on: bool, conf: Optional[float], now: float,
                      obs: Observation, out: BehaviorUpdate):
-        gap = self.config.gap_tolerance_seconds
+        gap = self._gap(t.kind)
         if on:
             if t.raw_since is None or (t.last_true is not None and now - t.last_true > gap):
                 # New run (or the previous one lapsed beyond tolerance).

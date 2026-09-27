@@ -284,3 +284,66 @@ def test_teacher_display_name_xss_payload_is_stored_but_rendered_escaped(login_a
 def test_reset_face_rejects_non_numeric_user_id(login_as):
     admin = login_as("admin")
     assert admin.post("/api/admin/reset_face", json={"user_id": "abc"}).status_code == 400
+
+
+def test_duplicate_tracker_ids_for_one_person_do_not_flicker_identity():
+    """Regression (real webcam): ByteTrack kept ids 1 and 2 for ONE person and
+    reported one or the other per frame; id 2 carried the face but stayed in
+    CONFLICT, so the student flickered to 'not visible' ~20% of the time."""
+    gallery = random_gallery(3, seed=31)
+    mgr = IdentityManager(gallery)
+    rng = np.random.default_rng(9)
+    t = 0.0
+    for _ in range(15):                                   # id 1 confirms first
+        t += 0.13
+        mgr.process_frame([(1, noisy(gallery[3], 0.03, rng))], t)
+    seen_missing = 0
+    pattern = [[1], [1, 2], [2], [2], [1], [1, 2], [2]]
+    for i in range(200):                                  # ~26 s at 7.5 FPS
+        t += 0.13
+        ids = pattern[i % len(pattern)]
+        face_on = ids[-1]                                  # the face is associated to one box only
+        obs = [(tid, noisy(gallery[3], 0.03, rng) if tid == face_on else None) for tid in ids]
+        d = mgr.process_frame(obs, t)
+        owners = [tid for tid, x in d.items() if x.student_id == 3]
+        assert len(owners) <= 1                            # never two tracks for one student
+        if i > 20 and not owners:
+            seen_missing += 1
+    assert seen_missing == 0
+
+
+def test_phone_signal_survives_low_confidence_frames_and_dropouts():
+    """Regression (real webcam): YOLOv8n scored a phone in use 0.25-0.62 with
+    dropped frames; the old 0.35/0.5 s rules produced only a 2.4 s episode
+    over ~8.5 s of phone use."""
+    confs = [0.318, 0.525, 0.403, 0.296, None, 0.506, 0.599, 0.407, None, None, 0.287, None, None, 0.329, 0.331,
+             None, 0.357, 0.253, 0.438, 0.365, 0.443, 0.415, None, None, None, 0.509, 0.259, 0.263, None, None,
+             0.283, 0.396, None, 0.28, 0.323, None, None, None, 0.281, 0.262, 0.287, None, None, 0.313, 0.483,
+             0.27, 0.572, 0.578, 0.389, 0.567, 0.594, 0.531, 0.443, 0.379, 0.587, 0.469, 0.35, 0.463, 0.524,
+             0.476, 0.431, 0.618, 0.282]
+    an = BehaviorAnalyzer(1)
+    t, ended, started = 100.0, [], []
+    for i in range(20):                                   # warm-up, normal face
+        t += 0.135
+        an.update(Observation(timestamp=t, visible=True, face_visible=True, ear=0.26, yaw=0, pitch=0))
+    t_phone = t
+    for c in confs:
+        t += 0.135
+        u = an.update(Observation(timestamp=t, visible=True, face_visible=True, ear=0.09, yaw=0, pitch=0,
+                                  phone_confidence=c))
+        started += u.started
+        ended += u.ended
+    ended += an.close(t)
+    phone = [e for e in ended if e.type == "PHONE"]
+    assert len(phone) == 1 and phone[0].duration > 7.0
+    assert not [e for e in started if e.type == "DROWSY"]   # looking down at the phone is not drowsiness
+
+
+def test_single_phone_flash_still_ignored_with_new_tolerances():
+    an = BehaviorAnalyzer(1)
+    started = []
+    for i in range(60):
+        t = 100 + i * 0.133
+        started += an.update(Observation(timestamp=t, visible=True, face_visible=True, ear=0.26, yaw=0, pitch=0,
+                                         phone_confidence=0.9 if 3.0 <= i * 0.133 < 3.2 else None)).started
+    assert started == []
