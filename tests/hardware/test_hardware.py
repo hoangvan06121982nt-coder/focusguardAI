@@ -14,15 +14,21 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 
 
 def test_camera_delivers_frames():
-    import cv2
-    cap = cv2.VideoCapture(int(os.environ.get("FOCUSGUARD_CAMERA_INDEX", "0")))
+    """Real frames from the webcam. Waits up to 30 s for the macOS permission
+    dialog on first use (OpenCV fails immediately while it is pending)."""
+    import sys
+    import time
+    sys.path.insert(0, os.path.join(ROOT, "tools"))
+    from real_camera_check import open_camera
+    cap = open_camera(int(os.environ.get("FOCUSGUARD_CAMERA_INDEX", "0")), timeout=30.0)
     try:
-        ok = False
-        for _ in range(30):
+        frames = 0
+        t_end = time.time() + 2.0
+        while time.time() < t_end:
             ok, frame = cap.read()
-            if ok:
-                break
-        assert ok and frame is not None and frame.size > 0
+            if ok and frame is not None and frame.size > 0:
+                frames += 1
+        assert frames >= 5, f"only {frames} frames in 2 s"
     finally:
         cap.release()
 

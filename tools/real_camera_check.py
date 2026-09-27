@@ -212,6 +212,36 @@ def compute_verdicts(log):
 
 
 # ------------------------------------------------------------------ hardware run
+CAMERA_HELP = ("Camera not available. On macOS allow camera access for the app running this command "
+               "(System Settings > Privacy & Security > Camera > Terminal), quit and reopen Terminal, then rerun.")
+
+
+def open_camera(index, timeout=30.0, prompter=None):
+    """Open the webcam, waiting for the macOS permission prompt to be answered.
+
+    On first use macOS answers 'not determined' and OpenCV fails immediately
+    while the permission dialog is shown; retrying gives the user time to click
+    Allow. Raises SystemExit with instructions if no frame arrives in time.
+    """
+    import cv2
+    deadline = time.time() + timeout
+    announced = False
+    while time.time() < deadline:
+        cap = cv2.VideoCapture(index)
+        for _ in range(20):
+            ok, frame = cap.read()
+            if ok and frame is not None and frame.size > 0:
+                return cap
+            time.sleep(0.05)
+        cap.release()
+        if not announced:
+            msg = "Đang chờ quyền camera. Nếu macOS hiện hộp thoại, hãy bấm Allow."
+            (prompter.say(msg) if prompter else print(msg))
+            announced = True
+        time.sleep(1.0)
+    raise SystemExit(CAMERA_HELP)
+
+
 def enroll(face_recognizer, cap, prompter, seconds=6.0, min_samples=8):
     import numpy as np
     prompter.say("Đăng ký khuôn mặt. Hãy nhìn thẳng vào camera và giữ yên.", wait=True)
@@ -252,15 +282,14 @@ def run(args):
 
     os.chdir(ROOT)  # model paths (yolov8n.pt, face_landmarker.task) are relative to the repo
     prompter = Prompter(speak=not args.no_speak)
+    cap = open_camera(args.camera, prompter=prompter)   # fail fast before anything is written
+    recognizer = FaceRecognizer()
     os.makedirs(os.path.dirname(os.path.abspath(args.db)), exist_ok=True)
     for suffix in ("", "-wal", "-shm"):
         if os.path.exists(args.db + suffix):
             os.remove(args.db + suffix)
     repo = SQLiteRepository(args.db)
     sm = SessionManager(repo=repo, seed_demo_accounts=True)
-
-    recognizer = FaceRecognizer()
-    cap = cv2.VideoCapture(args.camera)
     emb_a, n_a = enroll(recognizer, cap, prompter)
     repo.save_face_embedding(STUDENT_A, json.dumps(emb_a))
     enrolled = {"A": n_a}

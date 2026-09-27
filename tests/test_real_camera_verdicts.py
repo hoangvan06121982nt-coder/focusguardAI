@@ -64,3 +64,54 @@ def test_second_person_scenarios_are_user_action_required_when_not_run():
     assert v["6_crossing"]["status"] == "USER_ACTION_REQUIRED"
     assert v["7_unknown_person"]["status"] == "USER_ACTION_REQUIRED"
     assert v["1_single_identity"]["status"] == "NOT_RUN"
+
+
+def test_open_camera_waits_for_permission_then_succeeds(monkeypatch):
+    """macOS: first opens fail while the permission dialog is pending."""
+    import types
+    import numpy as np
+    attempts = {"n": 0}
+
+    class FakeCap:
+        def __init__(self, idx):
+            attempts["n"] += 1
+            self.ok = attempts["n"] >= 3          # authorised on the third open
+
+        def read(self):
+            return (True, np.zeros((4, 4, 3), np.uint8)) if self.ok else (False, None)
+
+        def release(self):
+            pass
+
+    monkeypatch.setitem(sys.modules, "cv2", types.SimpleNamespace(VideoCapture=FakeCap))
+    monkeypatch.setattr(rc.time, "sleep", lambda s: None)
+    cap = rc.open_camera(0, timeout=5.0)
+    assert cap.ok and attempts["n"] == 3
+
+
+def test_open_camera_gives_instructions_when_never_authorised(monkeypatch):
+    import types
+    import pytest
+
+    class DeniedCap:
+        def __init__(self, idx):
+            pass
+
+        def read(self):
+            return False, None
+
+        def release(self):
+            pass
+
+    clock = {"t": 0.0}
+
+    def fake_time():
+        clock["t"] += 0.5
+        return clock["t"]
+
+    monkeypatch.setitem(sys.modules, "cv2", types.SimpleNamespace(VideoCapture=DeniedCap))
+    monkeypatch.setattr(rc.time, "sleep", lambda s: None)
+    monkeypatch.setattr(rc.time, "time", fake_time)
+    with pytest.raises(SystemExit) as exc:
+        rc.open_camera(0, timeout=3.0)
+    assert "Privacy & Security" in str(exc.value)
