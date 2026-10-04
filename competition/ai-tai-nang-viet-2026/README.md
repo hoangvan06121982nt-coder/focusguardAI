@@ -9,7 +9,7 @@ Thư mục này chứa **bản nguồn để review và cập nhật hồ sơ d�
 - `04_PromptLog_MinhChung_HuongDan.md` – hướng dẫn Prompt Log & evidence.
 - `05_Bo_CauHoi_PhanBien.md` – bộ câu hỏi luyện phản biện.
 - `CLAUDE_REVIEW_AND_SCREENSHOT_PROMPT.md` – prompt dùng cho Claude Code để audit claim, chạy test và chụp UI thật.
-- `screenshots/README.md` – quy ước ảnh giao diện thật dùng trong hồ sơ.
+- `screenshots/` – 5 ảnh giao diện thật; `screenshots/README.md` ghi quy ước và nguồn gốc từng ảnh.
 
 ## Nguyên tắc
 1. Không sửa claim kỹ thuật chỉ để hồ sơ “đẹp” hơn.
@@ -28,11 +28,15 @@ Thư mục này chứa **bản nguồn để review và cập nhật hồ sơ d�
 - `.github/workflows/ci.yml`
 - test suite và commit history hiện tại
 
-## Trạng thái
-Bản nguồn hiện vẫn có placeholder cho tên đội/thành viên/trường/lớp/giáo viên hướng dẫn. Chỉ điền bằng thông tin đăng ký thật.
+## Trạng thái (rà soát ngày 04/10/2026)
+Hồ sơ mô tả sản phẩm ở nhánh chính `main` tại commit `950f8f5` (PR #3 – giao diện mới – đã được merge). Kiểm thử và ảnh chụp được thực hiện tại commit `a9a0406`, có cùng mã nguồn với `950f8f5` (cùng tree `6d16bc8`).
 
-Bản PDF/DOCX có thể được sinh lại sau khi:
-- claim audit PASS;
-- UI branch cuối cùng được xác nhận;
-- screenshot thật được cập nhật;
-- thông tin đội được điền.
+Đã xong:
+- Rà soát từng claim với mã nguồn; số liệu, ngưỡng và thuật ngữ đã cập nhật theo phiên bản trên.
+- Chạy lại: `bash scripts/ci_check.sh` (184 đạt, 9 bỏ qua), Firestore emulator (6/6), kiểm thử phần cứng (3/3).
+- 5 ảnh giao diện thật trong `screenshots/`.
+
+Còn thiếu trước khi nộp (cần người làm):
+- Điền tên đội, thành viên, trường/lớp, giáo viên hướng dẫn.
+- Đính kèm Prompt Log gốc và kê khai đóng góp của từng thành viên (xem `04_PromptLog_MinhChung_HuongDan.md`).
+- Sinh lại bản PDF/DOCX từ bản nguồn này.

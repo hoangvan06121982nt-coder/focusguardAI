@@ -10,29 +10,31 @@ FocusGuard • Bảng A THCS
 
 ## 0:35–1:20 • Giải pháp
 
-“Camera phát hiện người và điện thoại. Sau đó hệ thống dùng đặc trưng khuôn mặt để xác định học sinh đã đăng ký. Chúng em không lấy một khung hình để kết luận ngay mà theo dõi tín hiệu theo thời gian: điện thoại phải đủ lâu, nhắm mắt phải kéo dài, quay đầu phải kéo dài; còn tạm khuất camera thì chưa bị trừ điểm.”
+“Camera phát hiện người và điện thoại. Sau đó hệ thống dùng đặc trưng khuôn mặt để biết đó là học sinh nào đã đăng ký. Chúng em không nhìn một khung hình rồi kết luận ngay mà theo dõi theo thời gian: thấy điện thoại từ 1 giây, nhắm mắt từ 1,5 giây, quay đầu từ 2 giây mới tính; còn khuất camera dưới 10 giây thì chưa bị trừ điểm.”
 
 ## 1:20–2:10 • Phần AI và phần nhóm xây dựng
 
-“Chúng em sử dụng YOLOv8, ByteTrack, MediaPipe và InsightFace là các công nghệ có sẵn. Phần nhóm tập trung xây dựng là cách ổn định danh tính, ghép tín hiệu theo từng học sinh, BehaviorAnalyzer theo thời gian, FocusEngine duy nhất, SessionRuntime, phân quyền và dashboard. Điểm tập trung là công thức minh bạch chứ không phải AI đo được suy nghĩ của học sinh.”
+“Chúng em dùng bốn công nghệ có sẵn: YOLOv8 để phát hiện người và điện thoại, ByteTrack để theo dõi một người qua các khung hình, MediaPipe để lấy mốc khuôn mặt, InsightFace để nhận ra khuôn mặt. Chúng em không tự xây các mô hình này. Phần riêng của dự án là cách giữ danh tính ổn định, cách biến tín hiệu thành hành vi kéo dài theo thời gian, bộ tính điểm, phân quyền và giao diện. Phần mã này được viết với sự hỗ trợ của trợ lý lập trình AI và chúng em đã kê khai trong Prompt Log. Điểm tập trung là công thức công khai, không phải AI đọc được suy nghĩ của học sinh.”
 
 ## 2:10–3:05 • Sản phẩm
 
-“Giáo viên đăng nhập, chọn lớp và bắt đầu phiên học. Khi có hành vi đủ điều kiện, sự kiện xuất hiện theo thời gian thực. Học sinh chỉ xem dữ liệu của mình; phụ huynh chỉ xem học sinh được liên kết. Nếu camera mất tín hiệu, hệ thống đóng băng điểm chứ không giả rằng học sinh mất tập trung.”
+“Giáo viên đăng nhập, mở trang Giám sát và bấm Bắt đầu buổi học. Khi một hành vi kéo dài đủ lâu, mục Cần chú ý ngay hiện tên học sinh, hành vi và số giây, ví dụ ‘Dùng điện thoại, 8 giây’. Học sinh chỉ xem dữ liệu của mình; phụ huynh chỉ xem con mình. Nếu camera mất tín hiệu, hệ thống giữ nguyên điểm chứ không coi là học sinh mất tập trung.”
 
 ## 3:05–4:05 • Kiểm thử
 
-“Hiện hệ thống có 184 test pass. Firestore emulator có 6/6 test hợp đồng và hardware tests 3/3 pass. Nhóm đã chạy camera thật trên MacBook Air M3, khoảng 7,5 FPS. Các tình huống như điện thoại, rời chỗ, ngắt camera đã chạy được. Tuy nhiên chúng em chưa có dataset lớp học thật đủ lớn để tuyên bố accuracy, nên hồ sơ ghi rõ NOT_EVALUATED.”
+“Hệ thống có 184 bài kiểm thử tự động đều đạt, 6 bài kiểm thử cơ sở dữ liệu Firestore trên máy giả lập đều đạt, và 3 bài kiểm thử phần cứng đều đạt. Chúng em đã chạy camera thật trên MacBook Air M3, khoảng 7,5 khung hình mỗi giây. Các tình huống dùng điện thoại, rời chỗ, ngắt camera đã chạy được. Nhưng mới chỉ thử với một người và chưa có bộ dữ liệu lớp học thật được gán nhãn, nên chúng em chưa công bố độ chính xác; hồ sơ ghi rõ là chưa đánh giá.”
 
 ## 4:05–4:45 • An toàn & kết
 
-“FocusGuard không nhận diện cảm xúc, không đo gaze và không ghi video. Hệ thống chỉ là tín hiệu hỗ trợ giáo viên, không dùng để tự động kỷ luật hoặc chấm hạnh kiểm. Mục tiêu tiếp theo của nhóm là cải thiện UI/UX và đánh giá trên dữ liệu có sự đồng ý, có ground truth. Chúng em muốn AI trong lớp học phải hữu ích, minh bạch và có trách nhiệm.”
+“FocusGuard không nhận diện cảm xúc, không đo hướng nhìn và không ghi video. Hệ thống chỉ là tín hiệu hỗ trợ giáo viên, không dùng để tự động kỷ luật hay chấm hạnh kiểm. Bước tiếp theo của chúng em là đánh giá trên dữ liệu có sự đồng ý và có người gán nhãn, và cải thiện việc phát hiện điện thoại vì hiện còn đứt đoạn. Chúng em muốn AI trong lớp học phải hữu ích, minh bạch và có trách nhiệm.”
 
-# Ba câu tuyệt đối không nói
+# Những câu tuyệt đối không nói
 
 - “AI của em đo chính xác mức độ tập trung của học sinh.”
 - “Nhóm em tự xây YOLO/InsightFace.”
-- “Hệ thống đã đạt accuracy X%” khi chưa có bộ dữ liệu thật gán nhãn.
+- “Hệ thống đã đạt độ chính xác X%” khi chưa có bộ dữ liệu thật gán nhãn.
+- “184 bài kiểm thử đạt nghĩa là AI chính xác.” (Kiểm thử chỉ chứng minh mã chạy đúng thiết kế.)
+- “Toàn bộ mã do chúng em tự gõ.” (Phải nói rõ có dùng trợ lý lập trình AI.)
 
 # Mẹo trình bày
 
