@@ -2,9 +2,9 @@
 
 This folder archives the generated Word/PDF materials for FocusGuard - AI Tài Năng Việt 2026, Bảng A.
 
-## Canonical public files
+## GitHub archive files
 
-Use these as the current public-safe versions on GitHub:
+These binary files are retained as public-safe archive copies. For the current submission, use the Google Drive FINAL folder referenced below; the Markdown sources in the parent directory carry the latest mentor metadata.
 
 - `01_FocusGuard_HoSo_BangA_8trang.docx`
 - `01_FocusGuard_HoSo_BangA_8trang.pdf`
@@ -23,7 +23,7 @@ The official BTC template, presentation script, demo script and rebuttal-questio
 
 This repository is public. The unredacted final BTC submission contains a minor student's date of birth, phone number and email, so that private version is intentionally kept off GitHub.
 
-The unredacted FINAL submission and the final Prompt Log package are stored in the team's Google Drive submission folder.
+The current unredacted FINAL submission, updated student email, mentor information, 8-page dossier and Prompt Log package are stored in the team's Google Drive submission folder. Do not submit the GitHub binary archive in place of that Drive FINAL set.
 
 ## Google Drive FINAL folder
 
