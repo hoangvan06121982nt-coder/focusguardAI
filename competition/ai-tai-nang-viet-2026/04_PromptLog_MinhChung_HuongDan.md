@@ -1,4 +1,4 @@
-# PROMPT LOG & MINH CHỨNG PHÁT TRIỂN
+# PROMPT LOG & MINH CHỨNG PHÁT TRIỂN\n\n**Đội:** iKH Future Makers · **Mã đội:** AI26A0049 · **Thí sinh:** Nguyễn Hoàng Bảo Long, lớp 8/1 - THCS Tây Nha Trang · **Người hướng dẫn:** Phan Tuấn Kiệt - Trung tâm tin học iKH - Giám Đốc
 
 > Prompt Log dùng lịch sử thật do đội cung cấp, không dựng lại nội dung hoặc timestamp.
 
