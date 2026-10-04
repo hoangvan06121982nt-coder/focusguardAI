@@ -18,7 +18,7 @@ từ dữ liệu thật. Mọi tuyên bố về "AI" được giới hạn ở n
 | Phân quyền theo quyền sở hữu | Có | học sinh / giáo viên theo lớp / phụ huynh theo liên kết / admin tường minh |
 | Bảo mật | Có | secret từ env, cookie, CORS allow-list, Werkzeug hash + migrate, Firestore deny-all |
 | Loại bỏ dữ liệu giả | Có | không mock students, drift ngẫu nhiên, cảm xúc, dự báo, root-cause mặc định, seed phiên giả |
-| Analytics thật | Có | `insufficient_data` / N/A khi thiếu dữ liệu; zero stays zero |
+| Analytics thật | Có | `insufficient_data` khi thiếu dữ liệu (giao diện ghi "Chưa có" / "Chưa đủ dữ liệu"); zero stays zero |
 | Khung đánh giá | Có | P/R/F1, cảnh báo sai/giờ, độ trễ, danh tính, FPS – nhãn SYNTHETIC |
 | CI | Có | compile, import, pytest, JS syntax, security check, đánh giá SYNTHETIC |
 
@@ -29,7 +29,7 @@ từ dữ liệu thật. Mọi tuyên bố về "AI" được giới hạn ở n
 * Độ chính xác thực tế: **NOT_EVALUATED**. Phần cứng: **HARDWARE_REQUIRED**.
 
 ## Kết quả kiểm thử (máy local, `bash scripts/ci_check.sh`)
-142 passed, 0 failed, 9 skipped (3 HARDWARE_REQUIRED, 6 EMULATOR_REQUIRED). Firestore emulator: 6/6 PASS. Hardware 3/3 PASS; camera thật: kịch bản 1–5, 8, 9 PASS (xem docs/REAL_CAMERA_RESULTS.md).
+184 passed, 0 failed, 9 skipped (3 HARDWARE_REQUIRED, 6 EMULATOR_REQUIRED) sau đợt nâng cấp giao diện (142 tại thời điểm merge PR #1). Firestore emulator: 6/6 PASS. Hardware 3/3 PASS; camera thật: kịch bản 1–5, 8, 9 PASS (xem docs/REAL_CAMERA_RESULTS.md).
 
 ## Việc còn lại
 1. Thu thập bộ dữ liệu lớp học thật có nhãn và có đồng ý → chạy `scripts/run_evaluation.py --real-dataset`.

@@ -9,7 +9,7 @@
 | Điểm tập trung heuristic, công thức công khai | Dự đoán bằng học máy (không có mô hình dự báo được kiểm chứng) |
 | Thống kê khung giờ học từ dữ liệu đã lưu | "AI coach" / khuyến nghị giả dạng mô hình |
 
-Mọi chỉ số chưa được đo hiển thị **N/A / "Không đủ dữ liệu"**, không bao giờ là số điền sẵn.
+Mọi chỉ số chưa được đo hiển thị **"Chưa có" / "Chưa đủ dữ liệu"**, không bao giờ là số điền sẵn.
 
 ## Trạng thái đánh giá
 
