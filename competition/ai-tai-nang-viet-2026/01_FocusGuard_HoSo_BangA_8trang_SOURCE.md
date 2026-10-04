@@ -5,10 +5,10 @@
 
 | Thông tin | Nội dung |
 |---|---|
-| Tên đội | [ĐIỀN TÊN ĐỘI ĐÃ ĐĂNG KÝ] |
-| Thành viên | [ĐIỀN HỌ TÊN 1–3 THÍ SINH] |
-| Trường/Lớp | [ĐIỀN ĐÚNG THÔNG TIN ĐÃ ĐĂNG KÝ] |
-| Giáo viên hướng dẫn | [ĐIỀN NẾU CÓ] |
+| Tên đội | iKH Future Makers |
+| Thành viên | Nguyễn Hoàng Bảo Long |
+| Trường/Lớp | Lớp 8/1 - THCS Tây Nha Trang, Khánh Hòa |
+| Giáo viên hướng dẫn | Chưa cung cấp |
 | Bảng thi | Bảng A – Học sinh THCS |
 | Sản phẩm | FocusGuard – Hệ thống hỗ trợ giáo viên nhận biết tín hiệu mất tập trung bằng camera |
 | Phiên bản mô tả | Nhánh chính `main` tại commit `950f8f5` (đã gồm giao diện mới; mã ứng dụng giống hệt commit `a9a0406` dùng để kiểm thử và chụp ảnh) |
