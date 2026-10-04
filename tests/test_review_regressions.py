@@ -255,22 +255,57 @@ def test_class_analytics_exclude_personal_sessions(manager, clock, repo):
 
 
 # ------------------------------------------------------------ frontend
-def test_admin_tables_escape_user_controlled_values():
-    js = open(os.path.join(ROOT, "static", "js", "main.js"), encoding="utf-8").read()
-    for raw in ("${u.username}", "${u.display_name}", "${u.class_name}", "${c.class_name}", "${u.display_name.charAt(0)}"):
-        assert raw not in js, raw
+UI_SCRIPTS = ("core.js", "teacher.js", "student.js", "admin.js")
+UI_TEMPLATES = ("base.html", "login.html", "error.html", "teacher.html", "student.html", "parent.html", "admin.html")
+USER_FIELDS = r"(display_name|username|class_name|name|subject|linked_student_name|message)"
+
+
+def _ui_script(name):
+    return open(os.path.join(ROOT, "static", "js", name), encoding="utf-8").read()
+
+
+def test_ui_scripts_escape_user_controlled_values():
+    """Anything a user can type (names, class names, subjects, messages) must go
+    through esc() before it is concatenated into an HTML string."""
+    import re
+    field = re.compile(r"\b[\w.]+\." + USER_FIELDS + r"\b")
+    safe_prefix = ("esc(", "FG.initials(")
+    for name in UI_SCRIPTS:
+        js = _ui_script(name)
+        assert "${" not in js, f"{name}: template literals bypass the esc() convention"
+        for lineno, line in enumerate(js.splitlines(), 1):
+            if "'<" not in line and '"<' not in line:
+                continue            # not building HTML on this line
+            for m in field.finditer(line):
+                before = line[:m.start()]
+                assert before.endswith(safe_prefix), f"{name}:{lineno}: unescaped {m.group(0)}"
 
 
 def test_teacher_snapshots_are_scoped_to_selected_class():
-    js = open(os.path.join(ROOT, "static", "js", "main.js"), encoding="utf-8").read()
-    assert "emit('request_class_snapshot', {})" not in js
-    assert "data.class_id !== classId" in js
+    js = _ui_script("teacher.js")
+    assert 'emit("request_class_snapshot", { class_id: S.classId })' in js
+    assert 'emit("join_teacher_room", { class_id: S.classId })' in js
+    assert "data.class_id !== S.classId" in js          # snapshots of another class are dropped
 
 
-def test_teacher_template_has_no_hardcoded_numbers():
-    html = open(os.path.join(ROOT, "templates", "teacher_dashboard.html"), encoding="utf-8").read()
-    for fake in ("28/28", "27/28", "0/28", ">84%<", ">88%<", ">92%<", ">95%<", "20/05/2026"):
-        assert fake not in html, fake
+def test_ui_has_no_hardcoded_numbers_or_fake_data():
+    import re
+    for name in UI_TEMPLATES:
+        html = open(os.path.join(ROOT, "templates", name), encoding="utf-8").read()
+        for fake in ("28/28", "27/28", "0/28", ">84%<", ">88%<", ">92%<", ">95%<", "20/05/2026"):
+            assert fake not in html, (name, fake)
+    for name in UI_SCRIPTS:
+        js = _ui_script(name)
+        assert not re.search(r"Math\.random\(", js), name
+
+
+def test_ui_never_decides_role_or_ai_state_on_the_client():
+    """The browser may not push AI state, and no page reads the role from the DOM."""
+    for name in UI_SCRIPTS:
+        js = _ui_script(name)
+        for forbidden in ("student_data_push", "student_frame_push", "localStorage.getItem(\"role\")",
+                          "firebase", "firestore"):
+            assert forbidden not in js, (name, forbidden)
 
 
 def test_teacher_display_name_xss_payload_is_stored_but_rendered_escaped(login_as, app):

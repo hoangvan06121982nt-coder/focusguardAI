@@ -11,20 +11,12 @@ from flask import (Flask, Response, abort, jsonify, redirect, render_template, r
 from flask_socketio import SocketIO, disconnect, emit, join_room
 
 from repository import load_dotenv
-from focusguard import authz, realtime
+from focusguard import authz, camera_state, realtime
 from focusguard import runtime_state as rs
 from focusguard.security import build_flask_config
 
 load_dotenv()
 
-LEGACY_CAMERA_STATE = {
-    rs.FOCUS_FOCUSED: "TAP TRUNG",
-    rs.FOCUS_DROWSY: "BUON NGU",
-    rs.FOCUS_PHONE: "DUNG DIEN THOAI",
-    rs.FOCUS_HEAD_AWAY: "NGOANH MAT DI",
-    rs.FOCUS_TEMPORARILY_NOT_VISIBLE: "KHONG THAY KHUON MAT",
-    rs.FOCUS_AWAY: "KHONG THAY KHUON MAT",
-}
 MSG_FORBIDDEN = "Không có quyền truy cập"
 
 
@@ -51,18 +43,42 @@ class CameraHub:
         self.key = None
         self.users = 0
         self.generation = 0
+        self.starting_key = None      # set while a pipeline (camera + models) is loading
+        self.failed_key = None        # last key whose pipeline could not be started
 
     def acquire(self, key, factory):
         with self.lock:
             if self.pipeline is not None and self.key != key:
                 self._close()
             if self.pipeline is None:
-                self.pipeline = factory()
+                self.starting_key = key
+                self.failed_key = None
+                try:
+                    self.pipeline = factory()
+                except Exception as exc:
+                    self.failed_key = key
+                    print("[CAMERA] pipeline failed to start:", exc)   # details stay server-side
+                    raise
+                finally:
+                    self.starting_key = None
                 self.key = key
                 self.users = 0
                 self.generation += 1
             self.users += 1
             return self.pipeline, self.generation
+
+    def describe(self, matches):
+        """Status of the pipeline whose key satisfies ``matches`` (no locking:
+        called from status endpoints while a pipeline may be loading)."""
+        pipeline, key = self.pipeline, self.key
+        streaming = pipeline is not None and key is not None and matches(key)
+        return {
+            "starting": self.starting_key is not None and matches(self.starting_key),
+            "failed": self.failed_key is not None and matches(self.failed_key),
+            "streaming": streaming,
+            "viewers": self.users if streaming else 0,
+            "device_ok": getattr(pipeline, "device_ok", None) if streaming else None,
+        }
 
     def is_current(self, generation):
         return self.pipeline is not None and self.generation == generation
@@ -88,6 +104,8 @@ class CameraHub:
         with self.lock:
             if self.pipeline is not None and (predicate is None or predicate(self.key)):
                 self._close()
+            if self.failed_key is not None and (predicate is None or predicate(self.failed_key)):
+                self.failed_key = None
 
     def _close(self):
         try:
@@ -150,14 +168,56 @@ def create_app(repo=None, env=None, async_mode=None, start_background=True, sess
     def api_error(message=MSG_FORBIDDEN, code=403):
         return jsonify({"status": "error", "message": message}), code
 
+    ROLE_LABELS = {"student": "Học sinh", "teacher": "Giáo viên", "parent": "Phụ huynh", "admin": "Quản trị viên"}
+
+    @app.context_processor
+    def inject_shell():
+        role = session.get("role")
+        return {"shell_role": role, "shell_role_label": ROLE_LABELS.get(role, ""),
+                "shell_name": session.get("display_name") or session.get("user") or ""}
+
+    def wants_json():
+        return request.path.startswith("/api/") or request.path.startswith("/socket.io")
+
+    def error_page(code, title, message):
+        if wants_json():
+            return jsonify({"status": "error", "message": message}), code
+        return render_template("error.html", code=code, title=title, message=message,
+                               logged_in=current_principal() is not None), code
+
+    @app.errorhandler(404)
+    def not_found(_e):
+        return error_page(404, "Không tìm thấy trang", "Đường dẫn này không tồn tại hoặc đã được chuyển đi.")
+
+    @app.errorhandler(403)
+    def forbidden(_e):
+        return error_page(403, "Không có quyền truy cập", "Tài khoản của bạn không được xem trang này.")
+
+    @app.errorhandler(405)
+    def method_not_allowed(_e):
+        return error_page(405, "Thao tác không hợp lệ", "Yêu cầu này không được hỗ trợ.")
+
+    @app.errorhandler(413)
+    def too_large(_e):
+        return error_page(413, "Dữ liệu quá lớn", "Tệp hoặc ảnh gửi lên vượt quá giới hạn cho phép.")
+
+    @app.errorhandler(Exception)
+    def server_error(exc):
+        from werkzeug.exceptions import HTTPException
+        if isinstance(exc, HTTPException):
+            return error_page(exc.code or 500, "Có lỗi xảy ra", "Không thể xử lý yêu cầu này.")
+        app.logger.exception("Unhandled error on %s", request.path)   # traceback stays server-side
+        return error_page(500, "Có lỗi xảy ra", "Không thể tải dữ liệu lúc này. Vui lòng thử lại.")
+
     def login_required_page(role=None):
         def deco(fn):
             @functools.wraps(fn)
             def wrapper(*args, **kwargs):
                 p = current_principal()
                 if p is None:
+                    had_session = "user_id" in session
                     session.clear()
-                    return redirect(url_for("login"))
+                    return redirect(url_for("login", expired=1) if had_session else url_for("login"))
                 if role and p.role != role:
                     return redirect(url_for("index"))
                 return fn(p, *args, **kwargs)
@@ -220,12 +280,12 @@ def create_app(repo=None, env=None, async_mode=None, start_background=True, sess
             return redirect(url_for("admin_root"))
         if p.role == authz.ROLE_PARENT:
             return redirect(url_for("parent_dashboard"))
-        return render_template("index.html", active_tab="dashboard")
+        return render_template("student.html", active_tab="dashboard")
 
     def student_page(tab):
         @login_required_page(authz.ROLE_STUDENT)
         def view(p):
-            return render_template("index.html", active_tab=tab)
+            return render_template("student.html", active_tab=tab)
         view.__name__ = f"student_{tab}"
         return view
 
@@ -242,10 +302,13 @@ def create_app(repo=None, env=None, async_mode=None, start_background=True, sess
         def view(p):
             classes = [{"id": cid, "class_name": repo.get_class_name(cid)} for cid in sorted(p.class_ids)]
             current = teacher_class_id(p)
-            return render_template("teacher_dashboard.html", active_tab=tab,
+            if current is not None and int_arg("class_id") == current:
+                session["class_id"] = current      # remember the (authorised) class across pages
+            return render_template("teacher.html", active_tab=tab,
                                    teacher_name=session.get("display_name", "Giáo viên"),
-                                   class_name=repo.get_class_name(current), teacher_classes=classes,
-                                   current_class_id=current)
+                                   class_name=repo.get_class_name(current) if current else None,
+                                   teacher_classes=classes, current_class_id=current,
+                                   min_focus_threshold=teacher_settings.get(p.user_id, {}).get("min_focus_threshold", 65))
         view.__name__ = f"teacher_{tab}"
         return view
 
@@ -259,7 +322,7 @@ def create_app(repo=None, env=None, async_mode=None, start_background=True, sess
         sid = p.linked_student_id
         student = repo.get_user_by_id(sid) if sid else None
         if not student:
-            return render_template("parent_dashboard.html", student_name="Chưa liên kết học sinh",
+            return render_template("parent.html", student_name=None, linked=False,
                                    profile_stats=sm.student_profile(-1), recommendations=None,
                                    heatmap_data={}, comparison=[], attendance=[], attendance_summary=None)
         attendance = sm.student_attendance_history(sid)
@@ -270,32 +333,41 @@ def create_app(repo=None, env=None, async_mode=None, start_background=True, sess
             "away_count": sum(a.get("away_count") or 0 for a in attendance),
         }
         return render_template(
-            "parent_dashboard.html", student_name=student.get("display_name"),
+            "parent.html", student_name=student.get("display_name"), linked=True,
             profile_stats=sm.student_profile(sid), recommendations=sm.student_recommendation(sid),
             heatmap_data=sm.student_heatmap(sid), comparison=sm.student_session_comparison(sid, 7),
             attendance=attendance[:10], attendance_summary=attendance_summary)
 
     @app.route("/mobile")
-    @login_required_page()
-    def mobile_simulator(p):
-        return render_template("mobile_simulator.html")
+    def mobile_simulator():
+        # The phone mock-up was replaced by responsive pages; keep the URL working.
+        return redirect(url_for("index"))
 
     # ----------------------------------------------------------- authentication
     @app.route("/login", methods=["GET", "POST"])
     def login():
         if current_principal() is not None:
             return redirect(url_for("index"))
-        error = None
+        error, username = None, ""
         if request.method == "POST":
-            user = repo.authenticate_user(request.form.get("username", "").strip(), request.form.get("password", ""))
+            username = request.form.get("username", "").strip()[:80]
+            try:
+                user = repo.authenticate_user(username, request.form.get("password", ""))
+            except Exception:
+                app.logger.exception("Login backend error")
+                return render_template("login.html", username=username, show_demo=cfg["SEED_DEMO_ACCOUNTS"],
+                                       error="Không thể đăng nhập lúc này. Vui lòng thử lại sau."), 503
             if user:
                 session.clear()
                 session.permanent = True
                 session["user"], session["user_id"] = user[1], user[0]
                 session["display_name"], session["role"], session["class_id"] = user[2], user[3], user[4]
                 return redirect(url_for("index"))
-            error = "Tên đăng nhập hoặc mật khẩu không đúng!"
-        return render_template("login.html", error=error)
+            # Same message whether the account exists or not.
+            error = "Tên đăng nhập hoặc mật khẩu không đúng."
+        notice = "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại." if request.args.get("expired") else None
+        return render_template("login.html", error=error, notice=notice, username=username,
+                               show_demo=cfg["SEED_DEMO_ACCOUNTS"]), (401 if error else 200)
 
     @app.route("/logout")
     def logout():
@@ -365,14 +437,26 @@ def create_app(repo=None, env=None, async_mode=None, start_background=True, sess
         live = sm.student_live_view(p.user_id)
         s = live.get("student") or {}
         focus_state = s.get("focus_state", rs.FOCUS_UNKNOWN)
+        rt = sm.runtime_for_student(p.user_id)
+        hub = cameras.describe(lambda key: key == ("personal", p.user_id))
+        cam = camera_state.describe(camera_state.derive(live["is_active"], hub,
+                                                        rt.camera_status if rt is not None else None))
+        # Only whether the student's own class is in session, never class numbers.
+        class_rt = next((r for r in (sm.class_runtime(c) for c in p.class_ids) if r is not None), None)
         return jsonify({
+            "class_live": {"active": class_rt is not None, "mode": class_rt.mode if class_rt is not None else None},
             "is_active": live["is_active"],
             "seconds_elapsed": live["seconds_elapsed"],
+            "session_id": live.get("session_id"),
+            "linked_class_session_id": live.get("linked_class_session_id"),
+            "server_time": time.time(),
+            "camera": cam,
+            "behaviors": s.get("behaviors", []),
+            "connection_status": s.get("connection_status"),
             "camera_status": live.get("camera_status"),
             "focus_score": s.get("focus_score"),
             "average_focus_score": s.get("average_focus_score"),
             "focus_state": focus_state,
-            "current_state": LEGACY_CAMERA_STATE.get(focus_state, "CHUA CO DU LIEU"),
             "visibility_status": s.get("visibility_status"),
             "attendance_status": s.get("attendance_status"),
             "labels": s.get("labels"),
@@ -390,15 +474,16 @@ def create_app(repo=None, env=None, async_mode=None, start_background=True, sess
     def start_session(p):
         data = request.get_json(silent=True) or {}
         subject = (data.get("subject") or "").strip()[:40] or None
+        already = sm.personal_session_info(p.user_id) is not None
         session_id = sm.start_personal_session(p.user_id, subject=subject)
-        return jsonify({"status": "success", "session_id": session_id})
+        return jsonify({"status": "success", "session_id": session_id, "already_active": already})
 
     @app.route("/api/stop_session", methods=["POST"])
     @api_auth(authz.ROLE_STUDENT)
     def stop_session(p):
         result = sm.stop_personal_session(p.user_id)
         cameras.force_release(lambda key: key == ("personal", p.user_id))
-        return jsonify({"status": "success", "result": result})
+        return jsonify({"status": "success", "result": result, "was_active": result is not None})
 
     # ------------------------------------------------ personal analytics (own)
     def personal_endpoint(fn):
@@ -477,7 +562,8 @@ def create_app(repo=None, env=None, async_mode=None, start_background=True, sess
         beh = sm.config.behavior
         current = {"ear_threshold": beh.ear_threshold, "drowsy_threshold": beh.drowsy_min_seconds,
                    "distraction_threshold": beh.head_away_min_seconds,
-                   "phone_threshold": beh.phone_min_seconds, "editable": p.is_admin}
+                   "phone_threshold": beh.phone_min_seconds, "away_threshold": beh.away_min_seconds,
+                   "editable": p.is_admin}
         if request.method == "GET":
             return jsonify(current)
         if not p.is_admin:
@@ -496,43 +582,76 @@ def create_app(repo=None, env=None, async_mode=None, start_background=True, sess
         return jsonify({"status": "success", "message": "Cấu hình áp dụng cho phiên học mới."})
 
     # ----------------------------------------------------------- teacher API
+    MODE_LABELS = {"classroom": "Camera lớp học", "online": "Lớp trực tuyến"}
+
+    def class_payload(cid, view=None):
+        """Canonical class state for the teacher UI (REST and Socket.IO share it)."""
+        view = view or sm.class_live_view(cid)
+        camera = None
+        if view["active"] and view["mode"] == "classroom":
+            hub = cameras.describe(lambda key: key[:2] == ("classroom", cid))
+            camera = camera_state.describe(camera_state.derive(True, hub, view["camera_status"]))
+        return {
+            "status": "success", "class_id": cid, "class_name": repo.get_class_name(cid),
+            "students": view["students"], "statistics": view["statistics"],
+            "class_session_active": view["active"], "mode": view["mode"],
+            "mode_label": MODE_LABELS.get(view["mode"]),
+            "class_session_id": view["class_session_id"],
+            "started_at": view["started_at"], "elapsed_seconds": view["elapsed_seconds"],
+            "server_time": time.time(), "camera": camera, "camera_status": view["camera_status"],
+            "logs": view["logs"],
+        }
+
     @app.route("/api/teacher/class_status")
     @api_auth(authz.ROLE_TEACHER, authz.ROLE_ADMIN)
     def api_class_status(p):
         cid = teacher_class_id(p)
         if cid is None:
-            return api_error()
-        view = sm.class_live_view(cid)
-        return jsonify({"status": "success", "students": view["students"], "statistics": view["statistics"],
-                        "class_session_active": view["active"], "mode": view["mode"],
-                        "camera_status": view["camera_status"], "elapsed_seconds": view["elapsed_seconds"],
-                        "logs": view["logs"], "class_id": cid})
+            return api_error("Bạn chưa được phân công lớp này.")
+        return jsonify(class_payload(cid))
+
+    start_lock = threading.Lock()
 
     def _start_class(p, mode):
         data = request.get_json(silent=True) or {}
         cid = teacher_class_id(p, data) if data.get("class_id") is not None else teacher_class_id(p)
         if cid is None:
-            return api_error()
-        rt = sm.start_class(cid, mode=mode, started_by=p.user_id)
-        socketio.emit("class_started", {"message": "Giáo viên đã bắt đầu lớp học", "class_id": cid},
+            return api_error("Bạn chưa được phân công lớp này.")
+        with start_lock:      # two clicks / two tabs must not create two sessions
+            existing = sm.class_runtime(cid)
+            if existing is not None:
+                if existing.mode == mode:
+                    return jsonify({"status": "success", "already_active": True, "class_id": cid,
+                                    "class_session_id": existing.class_session_id,
+                                    "message": "Buổi học đang diễn ra."})
+                return api_error(f"Lớp đang có buổi học ở chế độ {MODE_LABELS.get(existing.mode, existing.mode)}. "
+                                 "Hãy kết thúc buổi đó trước.", 409)
+            if not repo.get_students_in_class(cid):
+                return api_error("Lớp này chưa có học sinh. Hãy thêm học sinh trước khi bắt đầu.", 409)
+            rt = sm.start_class(cid, mode=mode, started_by=p.user_id)
+        socketio.emit("class_started", {"message": "Giáo viên đã bắt đầu buổi học", "class_id": cid},
                       room=realtime.class_students_room(cid))
-        return jsonify({"status": "success", "class_session_id": rt.class_session_id, "class_id": cid,
-                        "message": "Lớp học đã bắt đầu."})
+        socketio.emit("class_snapshot", class_payload(cid), room=realtime.teacher_room(cid))
+        return jsonify({"status": "success", "already_active": False, "class_session_id": rt.class_session_id,
+                        "class_id": cid, "message": "Buổi học đã bắt đầu."})
 
     def _end_class(p, mode):
         data = request.get_json(silent=True) or {}
         cid = teacher_class_id(p, data) if data.get("class_id") is not None else teacher_class_id(p)
         if cid is None:
-            return api_error()
-        rt = sm.class_runtime(cid)
-        if rt is None:
-            return jsonify({"status": "success", "message": "Không có lớp học đang diễn ra."})
-        cameras.force_release(lambda key: key[:2] == ("classroom", cid))
-        result = sm.end_class(cid)
-        socketio.emit("class_ended", {"message": "Giáo viên đã kết thúc lớp học", "class_id": cid},
+            return api_error("Bạn chưa được phân công lớp này.")
+        with start_lock:
+            rt = sm.class_runtime(cid)
+            if rt is None:
+                return jsonify({"status": "success", "was_active": False, "class_id": cid,
+                                "class_session_id": None, "message": "Không có buổi học đang diễn ra."})
+            cameras.force_release(lambda key: key[:2] == ("classroom", cid))
+            result = sm.end_class(cid)
+        socketio.emit("class_ended", {"message": "Giáo viên đã kết thúc buổi học", "class_id": cid},
                       room=realtime.class_students_room(cid))
-        return jsonify({"status": "success", "class_session_id": result["class_session_id"],
-                        "message": "Lớp học đã kết thúc."})
+        socketio.emit("class_snapshot", class_payload(cid), room=realtime.teacher_room(cid))
+        return jsonify({"status": "success", "was_active": True, "class_id": cid,
+                        "class_session_id": result["class_session_id"], "message": "Buổi học đã kết thúc."})
 
     @app.route("/api/teacher/start_class", methods=["POST"])
     @api_auth(authz.ROLE_TEACHER)
@@ -554,35 +673,6 @@ def create_app(repo=None, env=None, async_mode=None, start_background=True, sess
     def end_offline_class(p):
         return _end_class(p, "classroom")
 
-    @app.route("/api/teacher/offline_classroom_status")
-    @api_auth(authz.ROLE_TEACHER, authz.ROLE_ADMIN)
-    def api_offline_classroom_status(p):
-        cid = teacher_class_id(p)
-        if cid is None:
-            return api_error()
-        view = sm.class_live_view(cid)
-        st = view["statistics"]
-        facts = []
-        if view["active"]:
-            facts.append(f"Camera: {view['camera_status']}. Đang thấy {st['visible']}/{st['enrolled']} học sinh.")
-            if st["phone"]:
-                facts.append(f"{st['phone']} học sinh có hành vi dùng điện thoại kéo dài.")
-            if st["drowsy"]:
-                facts.append(f"{st['drowsy']} học sinh nhắm mắt kéo dài (dấu hiệu buồn ngủ).")
-            if st["head_away"]:
-                facts.append(f"{st['head_away']} học sinh quay đầu khỏi hướng bảng kéo dài.")
-            if st["away"]:
-                facts.append(f"{st['away']} học sinh đang rời chỗ.")
-        return jsonify({
-            "status": "success", "students": view["students"],
-            "statistics": {"present": st["present"], "enrolled": st["enrolled"], "visible": st["visible"],
-                           "distracted": st["phone"] + st["head_away"], "drowsy": st["drowsy"],
-                           "focus_score": st["average_focus_score"]},
-            "analyses": facts, "suggestions": [], "logs": view["logs"],
-            "offline_class_active": view["active"] and view["mode"] == "classroom",
-            "camera_status": view["camera_status"], "elapsed_seconds": view["elapsed_seconds"],
-        })
-
     @app.route("/api/teacher/logs")
     @api_auth(authz.ROLE_TEACHER, authz.ROLE_ADMIN)
     def api_teacher_logs(p):
@@ -590,25 +680,6 @@ def create_app(repo=None, env=None, async_mode=None, start_background=True, sess
         if cid is None:
             return api_error()
         return jsonify(sm.class_live_view(cid)["logs"])
-
-    @app.route("/api/teacher/interventions")
-    @api_auth(authz.ROLE_TEACHER, authz.ROLE_ADMIN)
-    def api_teacher_interventions(p):
-        cid = teacher_class_id(p)
-        if cid is None:
-            return api_error()
-        st = sm.class_live_view(cid)["statistics"]
-        avg = st["average_focus_score"]
-        threshold = teacher_settings.get(p.user_id, {}).get("min_focus_threshold", 65)
-        if avg is None:
-            return jsonify({"status": "insufficient_data", "average_score": None, "needs_intervention": False,
-                            "message": "Không đủ dữ liệu", "recommendations": []})
-        needs = avg < threshold
-        return jsonify({"status": "success", "average_score": avg, "needs_intervention": needs,
-                        "measured_students": st["measured_students"],
-                        "message": (f"Điểm tập trung trung bình ({st['measured_students']} học sinh đo được) là {avg}, "
-                                    f"dưới ngưỡng {threshold}.") if needs else "Lớp học trên ngưỡng tập trung.",
-                        "recommendations": []})
 
     @app.route("/api/teacher/analytics_summary")
     @api_auth(authz.ROLE_TEACHER, authz.ROLE_ADMIN)
@@ -650,6 +721,32 @@ def create_app(repo=None, env=None, async_mode=None, start_background=True, sess
         summary["status"] = "success" if summary.get("status") == "ok" else summary.get("status")
         return jsonify(summary)
 
+    @app.route("/api/teacher/class_sessions")
+    @api_auth(authz.ROLE_TEACHER, authz.ROLE_ADMIN)
+    def api_teacher_class_sessions(p):
+        cid = teacher_class_id(p)
+        if cid is None:
+            return api_error("Bạn chưa được phân công lớp này.")
+        return jsonify({"status": "success", "class_id": cid, "sessions": sm.class_session_history(cid)})
+
+    @app.route("/api/teacher/class_session/<int:class_session_id>")
+    @api_auth(authz.ROLE_TEACHER, authz.ROLE_ADMIN)
+    def api_teacher_class_session(p, class_session_id):
+        row = repo.get_class_session(class_session_id)
+        if not row:
+            return api_error("Không tìm thấy buổi học.", 404)
+        if not authz.can_view_class_session(p, row):
+            return api_error()
+        detail = sm.class_session_detail(class_session_id, row["class_id"])
+        detail["status"] = "success"
+        return jsonify(detail)
+
+    @app.route("/api/teacher/settings", methods=["GET"])
+    @api_auth(authz.ROLE_TEACHER)
+    def get_teacher_settings(p):
+        return jsonify({"status": "success", "display_name": session.get("display_name"),
+                        "min_focus_threshold": teacher_settings.get(p.user_id, {}).get("min_focus_threshold", 65)})
+
     @app.route("/api/teacher/settings", methods=["POST"])
     @api_auth(authz.ROLE_TEACHER)
     def save_teacher_settings(p):
@@ -664,7 +761,8 @@ def create_app(repo=None, env=None, async_mode=None, start_background=True, sess
         except (TypeError, ValueError):
             threshold = 65
         teacher_settings[p.user_id] = {"min_focus_threshold": threshold}
-        return jsonify({"status": "success", "message": "Cấu hình đã được lưu thành công!"})
+        return jsonify({"status": "success", "message": "Đã lưu cài đặt.", "display_name": display_name[:80],
+                        "min_focus_threshold": threshold})
 
     # ------------------------------------------------------------- admin API
     @app.route("/admin")
@@ -677,12 +775,16 @@ def create_app(repo=None, env=None, async_mode=None, start_background=True, sess
     @app.route("/admin/accounts")
     @login_required_page(authz.ROLE_ADMIN)
     def admin_accounts(p):
-        return render_template("admin_dashboard.html", active_tab="accounts")
+        return render_template("admin.html", active_tab="accounts")
 
     @app.route("/admin/classes")
     @login_required_page(authz.ROLE_ADMIN)
     def admin_classes_page(p):
-        return render_template("admin_dashboard.html", active_tab="classes")
+        return render_template("admin.html", active_tab="classes")
+
+    def op_result(ok, msg):
+        # A failed operation is an HTTP error too, so clients cannot mistake it for success.
+        return jsonify({"status": "success" if ok else "error", "message": msg}), (200 if ok else 409)
 
     @app.route("/api/admin/classes")
     @api_auth(authz.ROLE_ADMIN)
@@ -692,7 +794,12 @@ def create_app(repo=None, env=None, async_mode=None, start_background=True, sess
     @app.route("/api/admin/users")
     @api_auth(authz.ROLE_ADMIN)
     def admin_users(p):
-        return jsonify(repo.get_users_list())
+        users = repo.get_users_list()
+        names = {u["id"]: u["display_name"] for u in users}
+        for u in users:
+            u["linked_student_name"] = names.get(u.get("student_id")) if u.get("role") == "parent" else None
+            u["is_self"] = u["id"] == p.user_id
+        return jsonify(users)
 
     @app.route("/api/admin/create_class", methods=["POST"])
     @api_auth(authz.ROLE_ADMIN)
@@ -701,7 +808,7 @@ def create_app(repo=None, env=None, async_mode=None, start_background=True, sess
         if not name:
             return api_error("Tên lớp không được trống", 400)
         ok, msg = repo.create_class(name)
-        return jsonify({"status": "success" if ok else "error", "message": msg})
+        return op_result(ok, msg)
 
     @app.route("/api/admin/edit_class/<int:class_id>", methods=["POST"])
     @api_auth(authz.ROLE_ADMIN)
@@ -710,13 +817,15 @@ def create_app(repo=None, env=None, async_mode=None, start_background=True, sess
         if not name:
             return api_error("Tên lớp không được trống", 400)
         ok, msg = repo.update_class(class_id, name)
-        return jsonify({"status": "success" if ok else "error", "message": msg})
+        return op_result(ok, msg)
 
     @app.route("/api/admin/delete_class/<int:class_id>", methods=["POST", "DELETE"])
     @api_auth(authz.ROLE_ADMIN)
     def admin_delete_class(p, class_id):
+        if sm.class_runtime(class_id) is not None:
+            return api_error("Lớp đang có buổi học diễn ra. Hãy kết thúc buổi học trước khi xóa lớp.", 409)
         ok, msg = repo.delete_class(class_id)
-        return jsonify({"status": "success" if ok else "error", "message": msg})
+        return op_result(ok, msg)
 
     def _user_payload():
         d = request.get_json(silent=True) or {}
@@ -731,7 +840,7 @@ def create_app(repo=None, env=None, async_mode=None, start_background=True, sess
         if not username or not password or not display_name or not role:
             return api_error("Vui lòng nhập đầy đủ thông tin", 400)
         ok, msg = repo.create_user(username, password, display_name, role, class_id, student_id)
-        return jsonify({"status": "success" if ok else "error", "message": msg})
+        return op_result(ok, msg)
 
     @app.route("/api/admin/edit_user/<int:user_id>", methods=["POST"])
     @api_auth(authz.ROLE_ADMIN)
@@ -740,7 +849,7 @@ def create_app(repo=None, env=None, async_mode=None, start_background=True, sess
         if not username or not display_name or not role:
             return api_error("Vui lòng nhập đầy đủ thông tin", 400)
         ok, msg = repo.update_user(user_id, username, password, display_name, role, class_id, student_id)
-        return jsonify({"status": "success" if ok else "error", "message": msg})
+        return op_result(ok, msg)
 
     @app.route("/api/admin/delete_user/<int:user_id>", methods=["POST", "DELETE"])
     @api_auth(authz.ROLE_ADMIN)
@@ -748,7 +857,16 @@ def create_app(repo=None, env=None, async_mode=None, start_background=True, sess
         if user_id == p.user_id:
             return api_error("Không thể tự xóa tài khoản đang đăng nhập.", 400)
         ok, msg = repo.delete_user(user_id)
-        return jsonify({"status": "success" if ok else "error", "message": msg})
+        return op_result(ok, msg)
+
+    recognizer_box = {}
+
+    def face_recognizer():
+        # Loading the face model takes seconds; do it once, not on every request.
+        if "instance" not in recognizer_box:
+            from face_recognition import FaceRecognizer
+            recognizer_box["instance"] = FaceRecognizer()
+        return recognizer_box["instance"]
 
     def _decode_image(b64):
         import cv2
@@ -782,8 +900,11 @@ def create_app(repo=None, env=None, async_mode=None, start_background=True, sess
                 continue
         if not imgs:
             return api_error("Không có hình ảnh hợp lệ để trích xuất", 400)
-        from face_recognition import FaceRecognizer
-        embedding = FaceRecognizer().register_student(imgs)
+        try:
+            embedding = face_recognizer().register_student(imgs)
+        except Exception:
+            app.logger.exception("register_face failed")
+            return api_error("Không thể xử lý ảnh lúc này. Vui lòng thử lại.", 500)
         if embedding is None:
             return api_error("Không phát hiện thấy khuôn mặt rõ ràng trong các bức ảnh", 400)
         # Only the embedding is stored; no face photo is written to disk.
@@ -817,8 +938,7 @@ def create_app(repo=None, env=None, async_mode=None, start_background=True, sess
             img = _decode_image(b64)
             if img is None:
                 return api_error("Ảnh không hợp lệ", 400)
-            from face_recognition import FaceRecognizer
-            faces = FaceRecognizer().app.get(img)
+            faces = face_recognizer().app.get(img)
             if not faces:
                 return jsonify({"status": "no_face", "message": "Không tìm thấy khuôn mặt"})
             f = max(faces, key=lambda x: (x.bbox[2] - x.bbox[0]) * (x.bbox[3] - x.bbox[1]))
@@ -830,9 +950,9 @@ def create_app(repo=None, env=None, async_mode=None, start_background=True, sess
             _, buf = cv2.imencode(".jpg", crop)
             return jsonify({"status": "success",
                             "cropped_image": "data:image/jpeg;base64," + base64.b64encode(buf).decode("ascii")})
-        except Exception as exc:
-            print(f"Error in detect_face: {exc}")
-            return api_error("Lỗi xử lý ảnh", 500)
+        except Exception:
+            app.logger.exception("detect_face failed")
+            return api_error("Không thể xử lý ảnh lúc này. Vui lòng thử lại.", 500)
 
     # ------------------------------------------------------------- Socket.IO
     def socket_principal():
@@ -900,8 +1020,7 @@ def create_app(repo=None, env=None, async_mode=None, start_background=True, sess
         if p is None or not authz.can_manage_class(p, cid):
             emit("error", {"code": "forbidden", "message": MSG_FORBIDDEN})
             return
-        view = sm.class_live_view(int(cid))
-        emit("class_snapshot", _snapshot_payload(view))
+        emit("class_snapshot", class_payload(int(cid)))
 
     def _reject_client_state(event):
         def handler(data=None):
@@ -931,19 +1050,12 @@ def create_app(repo=None, env=None, async_mode=None, start_background=True, sess
                                          "message": f"{session.get('display_name')} chuyển tab trình duyệt (client báo cáo)"},
                           room=realtime.teacher_room(rt.class_id))
 
-    def _snapshot_payload(view):
-        return {"students": view["students"], "statistics": view["statistics"],
-                "class_session_active": view["active"], "mode": view["mode"],
-                "camera_status": view["camera_status"], "elapsed_seconds": view["elapsed_seconds"],
-                "logs": view["logs"], "class_id": view["class_id"]}
-
     def broadcaster():
         while True:
             socketio.sleep(1.0)
             try:
                 for cid, rt in sm.registry.active_classes().items():
-                    view = sm.class_live_view(cid)
-                    socketio.emit("class_snapshot", _snapshot_payload(view), room=realtime.teacher_room(cid))
+                    socketio.emit("class_snapshot", class_payload(cid), room=realtime.teacher_room(cid))
                 for sid in list(sm._personal_sessions.keys()):
                     live = sm.student_live_view(sid)
                     socketio.emit("my_stats_update", realtime.student_self_view(live.get("student")),

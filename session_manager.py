@@ -142,7 +142,8 @@ class SessionManager:
         with self._lock:
             now = self.clock()
             if student_id in self._personal_sessions:
-                self.stop_personal_session(student_id)
+                # Idempotent: a double click / second tab must not create a second session.
+                return self._personal_sessions[student_id]["session_id"]
             user = self.repo.get_user_by_id(student_id) or {}
             class_id = user.get("class_id")
             class_rt = self.registry.class_runtime(class_id)
@@ -287,6 +288,59 @@ class SessionManager:
     def class_session_summary(self, class_session_id, class_id):
         rows = self.repo.get_session_students(class_session_id=class_session_id)
         return analytics.class_session_summary(rows, self._class_names(class_id))
+
+    @staticmethod
+    def _duration_seconds(started_at, ended_at):
+        a, b = analytics._to_dt(started_at), analytics._to_dt(ended_at)
+        return int((b - a).total_seconds()) if a and b else None
+
+    def class_session_history(self, class_id):
+        """Finished class sessions of a class, newest first, with real summaries."""
+        names = self._class_names(class_id)
+        out = []
+        for cs in self.repo.get_class_sessions(class_id):
+            if not cs.get("ended_at"):
+                continue
+            rows = self.repo.get_session_students(class_session_id=cs["id"])
+            events = self.repo.get_focus_events(class_session_id=cs["id"])
+            summary = analytics.class_session_summary(rows, names)
+            counts = analytics.event_breakdown(events, 1)["counts"]
+            out.append({
+                "class_session_id": cs["id"], "started_at": cs.get("started_at"), "ended_at": cs.get("ended_at"),
+                "mode": cs.get("mode"), "duration_seconds": self._duration_seconds(cs.get("started_at"), cs.get("ended_at")),
+                "enrolled": summary.get("enrolled", len(rows)), "present": summary.get("present", 0),
+                "late": summary.get("late", 0), "average_score": summary.get("average_score"),
+                "measured": summary.get("measured", 0), "event_counts": counts, "events_total": sum(counts.values()),
+            })
+        return out
+
+    def class_session_detail(self, class_session_id, class_id):
+        names = self._class_names(class_id)
+        cs = self.repo.get_class_session(class_session_id) or {}
+        rows = self.repo.get_session_students(class_session_id=class_session_id)
+        events = self.repo.get_focus_events(class_session_id=class_session_id)
+        students = [{
+            "student_id": r["student_id"], "name": names.get(r["student_id"], f"#{r['student_id']}"),
+            "attendance_status": r.get("attendance_status"),
+            "average_score": None if analytics.session_score(r) is None else int(round(analytics.session_score(r))),
+            "away_count": r.get("away_count") or 0, "away_seconds": int(r.get("away_seconds") or 0),
+            "event_counts": r.get("event_counts") or {},
+        } for r in rows]
+        students.sort(key=lambda x: x["name"])
+        event_rows = [{
+            "student_id": e.get("student_id"), "name": names.get(e.get("student_id"), f"#{e.get('student_id')}"),
+            "type": analytics.normalize_event_type(e.get("type")) or e.get("type"),
+            "start_time": e.get("start_time"), "duration_seconds": e.get("duration_seconds"),
+            "confidence": e.get("confidence"),
+        } for e in events]
+        event_rows.sort(key=lambda e: e.get("start_time") or 0)
+        return {
+            "class_session_id": class_session_id, "started_at": cs.get("started_at"), "ended_at": cs.get("ended_at"),
+            "mode": cs.get("mode"), "duration_seconds": self._duration_seconds(cs.get("started_at"), cs.get("ended_at")),
+            "summary": analytics.class_session_summary(rows, names),
+            "breakdown": analytics.event_breakdown(events, 1 if rows else 0),
+            "students": students, "events": event_rows,
+        }
 
     def latest_class_session_id(self, class_id):
         done = [c for c in self.repo.get_class_sessions(class_id) if c.get("ended_at")]

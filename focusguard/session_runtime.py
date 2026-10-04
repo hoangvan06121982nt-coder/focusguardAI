@@ -244,10 +244,21 @@ class SessionRuntime:
             "class_id": self.class_id,
             "duration_seconds": row.pop("duration"),
         })
+        if ep.type in ALERT_KINDS and ep.end_time is not None:
+            # Finished episodes carry the measured duration and confidence.
+            self._log("behavior_ended", st, ep.end_time,
+                      f"{st.display_name}: {rs.VI_LABELS.get(ep.type, ep.type)} đã kết thúc",
+                      episode=ep.to_dict())
         try:
             self.sink.save_focus_event(row)
         except Exception as exc:  # persistence must never crash the camera loop
-            self.logs.append({"type": "error", "message": f"save_focus_event failed: {exc}", "time": ep.end_time})
+            self._persist_failed("save_focus_event", exc, ep.end_time)
+
+    def _persist_failed(self, what: str, exc: Exception, when):
+        # Technical detail stays in the server log; the teacher only sees a plain message.
+        print(f"[RUNTIME] {what} failed: {exc!r}")
+        self.logs.append({"type": "error", "time": when,
+                          "message": "Không lưu được một phần dữ liệu buổi học. Vui lòng báo quản trị viên."})
 
     def _snapshot(self, st: rs.StudentRuntimeState, now: float):
         row = {
@@ -265,7 +276,7 @@ class SessionRuntime:
         try:
             self.sink.save_focus_snapshot(row)
         except Exception as exc:
-            self.logs.append({"type": "error", "message": f"save_focus_snapshot failed: {exc}", "time": now})
+            self._persist_failed("save_focus_snapshot", exc, now)
 
     def _log(self, kind: str, st: rs.StudentRuntimeState, now: float, message: str, **extra) -> dict:
         entry = {"type": kind, "student_id": st.student_id, "time": now, "message": message}
@@ -320,6 +331,7 @@ class SessionRuntime:
                 "camera_status": self.camera_status,
                 "started_at": self.started_at,
                 "elapsed_seconds": int((now if now is not None else self.started_at) - self.started_at),
+                "server_time": now,
                 "students": students,
                 "statistics": stats,
                 "logs": list(self.logs[-50:]),
@@ -362,7 +374,7 @@ class SessionRuntime:
                 try:
                     self.sink.save_session_student(row)
                 except Exception as exc:
-                    self.logs.append({"type": "error", "message": f"save_session_student failed: {exc}", "time": now})
+                    self._persist_failed("save_session_student", exc, now)
                 summaries.append(row)
             self.ended_at = now
             return summaries

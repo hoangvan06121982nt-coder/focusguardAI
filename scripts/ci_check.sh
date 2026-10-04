@@ -33,7 +33,9 @@ echo "== 3/6 tests =="
 
 echo "== 4/6 JS syntax =="
 if command -v node >/dev/null 2>&1; then
-    node --check static/js/main.js && echo "static/js/main.js OK"
+    for f in core teacher student admin; do
+        node --check "static/js/$f.js" && echo "static/js/$f.js OK"
+    done
 else
     echo "node not found: JS syntax check NOT RUN" && exit 1
 fi

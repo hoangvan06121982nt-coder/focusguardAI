@@ -13,7 +13,9 @@ Có bốn vai trò: **Học sinh**, **Giáo viên**, **Phụ huynh**, **Quản t
 
 **Đã kiểm chứng**
 * Kiến trúc lõi (IdentityManager, FocusEngine duy nhất theo thời gian, SessionRuntime, realtime do máy chủ quyết định,
-  phân quyền theo quyền sở hữu): `bash scripts/ci_check.sh`, 142 test pass, GitHub Actions xanh.
+  phân quyền theo quyền sở hữu): `bash scripts/ci_check.sh`, 184 test pass.
+* Giao diện: mọi trang của bốn vai trò, luồng bắt đầu/kết thúc buổi học, trạng thái camera và trang lỗi có test hồi quy
+  (`tests/test_ui_contract.py`) và đã được đi thử bằng trình duyệt ở 4 kích thước màn hình. Xem [docs/UI_UX.md](docs/UI_UX.md).
 * Bảo mật và repo công khai: `scripts/security_check.py` PASS trên tree hiện tại.
 * Firestore backend **trên emulator**: `bash scripts/firestore_emulator_check.sh` (6 test hợp đồng).
 * **Phần cứng và camera thật** (MacBook Air M3, FaceTime HD, khoảng 7.5 FPS): hardware tests 3/3 PASS; ứng dụng web chạy với webcam;
@@ -22,6 +24,8 @@ Có bốn vai trò: **Học sinh**, **Giáo viên**, **Phụ huynh**, **Quản t
 
 **Chưa đánh giá**
 * Độ chính xác ngoài thực tế: **NOT_EVALUATED** (chưa có bộ dữ liệu có nhãn và có sự đồng ý).
+* Luồng camera thật trên giao diện mới: chưa chạy lại (kết quả ở `docs/REAL_CAMERA_RESULTS.md` là trên giao diện cũ;
+  pipeline camera và logic chấm điểm không đổi).
 * Hai người cắt nhau và người lạ trên camera thật: cần thêm tình nguyện viên.
 * Firestore production (Cloud): chưa kiểm tra.
 
@@ -31,6 +35,7 @@ Có bốn vai trò: **Học sinh**, **Giáo viên**, **Phụ huynh**, **Quản t
 * Heuristic EAR không phân biệt nhắm mắt với nhìn xuống rất thấp; YOLOv8n phát hiện điện thoại với độ tin cậy dao động.
 * `mediapipe` kéo theo `opencv-contrib-python` 5.x, đè lên bản `opencv-python` 4.13 được pin.
 * Trên macOS, lệnh cần camera phải chạy từ Terminal.app (quyền Camera).
+* Camera chỉ phân tích khi trang Giám sát (giáo viên) hoặc Phiên học (học sinh) đang mở; giao diện có nhắc điều này.
 
 ## Kiến trúc
 
@@ -59,6 +64,10 @@ Chi tiết: [docs/COMPETITION_ARCHITECTURE.md](docs/COMPETITION_ARCHITECTURE.md)
 | Đánh giá (metrics + dữ liệu SYNTHETIC) | `focusguard/evaluation/` |
 | Pipeline camera lớp học / cá nhân | `classroom_ai.py`, `camera_ai.py` |
 | Web + Socket.IO | `app.py` |
+| Trạng thái camera hiển thị cho người dùng | `focusguard/camera_state.py` |
+| Giao diện: hệ thống thiết kế | `static/css/app.css` |
+| Giao diện: khung trang và các trang theo vai trò | `templates/base.html`, `teacher.html`, `student.html`, `parent.html`, `admin.html`, `login.html`, `error.html` |
+| Giao diện: JS dùng chung và theo vai trò | `static/js/core.js`, `teacher.js`, `student.js`, `admin.js` |
 | Lưu trữ (SQLite / Firestore) | `repository.py` |
 
 ## Cài đặt
@@ -91,7 +100,7 @@ bash scripts/ci_check.sh
 | `DATABASE_TYPE` | `sqlite` (mặc định) hoặc `firestore` (chỉ truy cập từ máy chủ). |
 
 Tài khoản demo (chỉ dev, mật khẩu = `DEMO_ACCOUNT_PASSWORD`, mặc định `123`): `admin`, `teacher`, `hocsinh`,
-`phuhuynh`. Mật khẩu luôn được lưu dạng hash Werkzeug; mật khẩu cũ dạng plaintext được hash lại khi khởi động.
+`phuhuynh`. Trang đăng nhập ở môi trường dev chỉ gợi ý tên đăng nhập, không in mật khẩu. Mật khẩu luôn được lưu dạng hash Werkzeug; mật khẩu cũ dạng plaintext được hash lại khi khởi động.
 
 ## Kiểm thử & CI
 
