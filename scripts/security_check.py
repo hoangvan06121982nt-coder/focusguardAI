@@ -42,9 +42,11 @@ SKIP_CONTENT = {"scripts/security_check.py", "tests/test_security.py", "tests/te
 PRODUCTION_MODULES = ["app.py", "session_manager.py", "repository.py", "camera_ai.py", "classroom_ai.py",
                       "focusguard/analytics.py", "focusguard/behavior.py", "focusguard/focus_engine.py",
                       "focusguard/session_runtime.py", "focusguard/identity.py", "focusguard/runtime_state.py",
-                      "focusguard/authz.py", "focusguard/realtime.py", "static/js/main.js",
-                      "templates/index.html", "templates/teacher_dashboard.html",
-                      "templates/parent_dashboard.html", "templates/mobile_simulator.html"]
+                      "focusguard/authz.py", "focusguard/realtime.py", "focusguard/camera_state.py",
+                      "static/js/core.js", "static/js/teacher.js", "static/js/student.js", "static/js/admin.js",
+                      "templates/base.html", "templates/login.html", "templates/error.html",
+                      "templates/teacher.html", "templates/student.html", "templates/parent.html",
+                      "templates/admin.html"]
 FAKE_DATA_RULES = [
     (re.compile(r"^\s*import random\b|^\s*from random import", re.M), "random module in production runtime"),
     (re.compile(r"Math\.random\("), "Math.random in production UI"),
