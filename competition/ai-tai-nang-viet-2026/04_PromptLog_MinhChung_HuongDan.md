@@ -1,24 +1,30 @@
 # PROMPT LOG & MINH CHỨNG PHÁT TRIỂN
 
-> **Bắt buộc:** Prompt Log phải là lịch sử thật. Không dựng lại prompt “cho đẹp”, không sửa timestamp và không khai nội dung tạo sau là lịch sử gốc.
+> Prompt Log dùng lịch sử thật do đội cung cấp, không dựng lại nội dung hoặc timestamp.
 
-## Trạng thái: USER_ACTION_REQUIRED
-Thư mục này **chưa có** Prompt Log gốc. Không ai được viết lại hay dựng lịch sử thay cho bản xuất thật.
+## 1. Prompt thực tế đã sử dụng
 
-Bằng chứng trong repo cho thấy trợ lý lập trình AI đã được dùng: 29 trên 33 commit của nhánh `main` (tại `950f8f5`) ghi `Co-Authored-By: Claude` (kiểm tra bằng `git log --format=%B | grep -c "Co-Authored-By: Claude"`). Vì vậy hồ sơ phải kê khai Claude Code và nộp lịch sử thật của các phiên đó.
+Bản Word/PDF trong `competition/ai-tai-nang-viet-2026/artifacts/` hiện đã nhúng **đầy đủ 3 prompt thật** lấy trực tiếp từ tài liệu Google Drive `một số câu lệnh` của đội:
 
-Nơi lấy lịch sử thật:
-- Claude Code lưu bản ghi từng phiên trên máy đã chạy, trong `~/.claude/projects/<tên-thư-mục-dự-án>/*.jsonl`; có thể xuất bằng chức năng xuất hội thoại của ứng dụng.
-- ChatGPT, Copilot hoặc công cụ khác: chỉ nộp nếu thực sự đã dùng, bằng chức năng xuất của chính công cụ đó.
-- Trước khi nộp phải đọc lại và che mật khẩu, token, cookie, đường dẫn riêng tư. Không commit bản ghi thô vào repo công khai.
+- Prompt 1: xử lý lỗi dữ liệu admin bị reset sau khi chạy lại web.
+- Prompt 2: khóa phạm vi tối ưu Camera Performance (camera capture thread, AI worker, YOLO, MediaPipe, recognition, JPEG, thread safety, Socket.IO, benchmark).
+- Prompt 3: nâng cấp AI camera cho 1 học sinh và nhiều học sinh, identity stability, temporal behavior, focus score theo thời gian, performance, test plan và acceptance criteria.
 
-## Cần nộp
-1. Bản xuất/ảnh/PDF lịch sử của công cụ AI đã thực sự dùng (xem trên).
-2. System prompt/custom instructions liên quan nếu nền tảng cho phép xuất.
-3. Prompt tạo/sửa code, debug, test, tài liệu, UI/UX.
-4. Minh chứng GitHub: commits, PR, CI, test, real-camera results, security.
+Nội dung trong bản DOCX/PDF được giữ nguyên từ nguồn đội cung cấp. Ghi chú của thí sinh về việc chỉ chọn 3 prompt tiêu biểu cũng được giữ lại.
 
-## Manifest minh chứng trong repo
+## 2. Hình ảnh minh chứng
+
+Bản Word/PDF đã nhúng trực tiếp các ảnh:
+- lịch sử các cuộc hội thoại phát triển FocusGuard;
+- minh chứng trợ lý AI lập kế hoạch Classroom AI Monitoring;
+- minh chứng phát triển/đối chiếu giao diện;
+- minh chứng verification sau triển khai.
+
+Thư mục minh chứng gốc:
+https://drive.google.com/drive/folders/1K6HAi9LngnBFuSgdzzg4nP0t6cMwB042
+
+## 3. Manifest minh chứng trong repo
+
 | Minh chứng | Nội dung |
 |---|---|
 | README.md | Kiến trúc, trạng thái test, hạn chế, cách chạy |
@@ -27,22 +33,20 @@ Nơi lấy lịch sử thật:
 | docs/REAL_CAMERA_RESULTS.md | Camera thật, kịch bản PASS, lỗi đã sửa |
 | docs/PRIVACY_AND_AI_SAFETY.md | Sinh trắc, không ghi video, phạm vi sử dụng |
 | .github/workflows/ci.yml | CI compile/import/pytest/JS/security/evaluation |
-| docs/UI_UX.md | Rà soát màn hình, hệ thống thiết kế, trạng thái hiển thị, hạn chế |
-| tests/ (184 bài, trong đó tests/test_ui_contract.py 41 bài) | Kiểm thử logic, phân quyền, giao diện |
-| competition/ai-tai-nang-viet-2026/screenshots/ | 5 ảnh giao diện thật kèm nguồn gốc (nhánh, commit, trạng thái) |
-| Git history | Quá trình sửa lỗi dựa trên kiểm thử thực tế; ghi rõ commit nào có trợ lý AI đồng tác giả |
+| docs/UI_UX.md | Hệ thống thiết kế và UX |
+| tests/ | 184 tests trong lần kiểm tra gần nhất |
+| competition/ai-tai-nang-viet-2026/screenshots/ | Ảnh giao diện thật |
+| Git history | Quá trình phát triển, sửa lỗi và kiểm thử |
 
-## Kê khai công nghệ
+## 4. Công cụ, thư viện và trợ lý AI
+
 - YOLOv8 / Ultralytics: mô hình/thư viện có sẵn; đội tích hợp và kiểm thử.
 - ByteTrack: tracker có sẵn; track_id chỉ là tạm thời.
 - MediaPipe Face Landmarker: landmark khuôn mặt.
 - InsightFace: embedding khuôn mặt.
 - Flask / Socket.IO: backend/realtime.
 - Firebase Admin / Firestore: backend tùy chọn.
-- Trợ lý lập trình AI: Claude Code (theo lịch sử commit). **Đội xác nhận lại, bổ sung công cụ khác nếu có dùng, và đính kèm Prompt Log gốc.**
-- Đóng góp của từng thành viên: **đội tự kê khai trung thực** (ý tưởng, yêu cầu, kiểm thử, phần mã tự viết, phần mã do AI viết và đội đã đọc hiểu).
+- ChatGPT: phân tích yêu cầu, hỗ trợ xây prompt, rà soát hồ sơ và giải thích.
+- Claude Code: đọc/sửa mã nguồn theo prompt, chạy test, audit và verification.
 
-## Trước khi nộp
-- Xóa/redact API key, token, cookie, mật khẩu.
-- Không đưa dữ liệu khuôn mặt riêng tư.
-- Mọi claim trong hồ sơ phải đối chiếu được với repo/test/video.
+**Theo yêu cầu cập nhật hồ sơ, không còn mục 5 “Kiểm tra trước khi upload”.**
