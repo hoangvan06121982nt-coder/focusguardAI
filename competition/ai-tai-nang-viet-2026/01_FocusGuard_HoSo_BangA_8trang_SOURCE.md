@@ -8,7 +8,7 @@
 | Tên đội | iKH Future Makers |
 | Thành viên | Nguyễn Hoàng Bảo Long |
 | Trường/Lớp | Lớp 8/1 - THCS Tây Nha Trang, Khánh Hòa |
-| Giáo viên hướng dẫn | Chưa cung cấp |
+| Giáo viên hướng dẫn | Phan Tuấn Kiệt - Trung tâm tin học iKH - Giám Đốc |
 | Bảng thi | Bảng A – Học sinh THCS |
 | Sản phẩm | FocusGuard – Hệ thống hỗ trợ giáo viên nhận biết tín hiệu mất tập trung bằng camera |
 | Phiên bản mô tả | Nhánh chính `main` tại commit `950f8f5` (đã gồm giao diện mới; mã ứng dụng giống hệt commit `a9a0406` dùng để kiểm thử và chụp ảnh) |
