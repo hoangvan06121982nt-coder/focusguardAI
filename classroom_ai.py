@@ -106,6 +106,7 @@ class ClassroomAI:
         if not self.cap.isOpened():
             self.cap.open(self.camera_index)
         ok, frame = self.cap.read()
+        self.device_ok = bool(ok)     # read by the server to report a truthful camera state
         if not ok:
             dummy = np.zeros((480, 640, 3), dtype=np.uint8)
             cv2.putText(dummy, "CLASSROOM CAMERA OFFLINE", (120, 240), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)

@@ -63,6 +63,7 @@ class FocusAI:
         if not self.cap.isOpened():
             self.cap.open(self.camera_index)
         ok, frame = self.cap.read()
+        self.device_ok = bool(ok)     # read by the server to report a truthful camera state
         if not ok:
             time.sleep(0.5)
             return self._offline_frame("CAMERA KHONG KHA DUNG"), False, "NO_CAMERA_SIGNAL"

@@ -160,6 +160,14 @@ class StudentRuntimeState:
             "event_counts": dict(self.event_counts),
             "distractions": self.total_events,
             "active_behaviors": sorted(self.active_episodes.keys()),
+            # What the teacher needs to act on: which behaviour and since when
+            # (server clock; pair with the snapshot's server_time for durations).
+            "behaviors": [{"type": k, "since": ep.get("start_time"), "label": VI_LABELS.get(k, k),
+                           "confidence": ep.get("confidence")}
+                          for k, ep in sorted(self.active_episodes.items(),
+                                              key=lambda kv: kv[1].get("start_time") or 0)],
+            "not_visible_since": self.not_visible_since,
+            "last_seen_at": self.last_seen_at,
             "labels": {
                 "attendance": VI_LABELS.get(self.attendance_status, self.attendance_status),
                 "connection": VI_LABELS.get(self.connection_status, self.connection_status),
